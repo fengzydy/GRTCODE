@@ -173,7 +173,10 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
 
     /*Intialize gas optics objects.*/
     GasOptics_t lbl_lw;
+/*
     int method = line_sweep;
+*/
+    int method = line_sample;
     catch(create_gas_optics(&lbl_lw, atm.num_levels, &lw_grid, &device,
                             hitran_path, atm.h2o_ctm, atm.o3_ctm, NULL, &method));
     catch(add_molecules(&lbl_lw, atm));
@@ -259,9 +262,21 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
             }
             write_output(output, RLU, flux_up_total, t, i);
             write_output(output, RLD, flux_down_total, t, i);
+/*
+            write_output(output, TAU, optics_lw_total.tau, t, i);
+*/
+            write_output(output, PLEV, &(atm.level_pressure[(offset + i)*atm.num_levels]), t, i);
+            write_output(output, TLEV, &(atm.level_temperature[(offset + i)*atm.num_levels]), t, i);
+            write_output(output, TLAY, &(atm.layer_temperature[(offset + i)*atm.num_layers]), t, i);
+            write_output(output, TS, &(atm.surface_temperature[offset + i]), t, i);
+            for (j=0; j<atm.num_molecules; ++j)
+            {
+                fp_t *ppmv = atm.ppmv[j];
+                write_output(output, H2OVMR + j, &(ppmv[(offset + i)*atm.num_levels]), t, i);
+            }
 
             /*Shortwave.*/
-            fp_t const zen_dir = atm.solar_zenith_angle[offset+i];
+            fp_t const zen_dir = atm.solar_zenith_angle[offset + i];
             if (zen_dir > 0.)
             {
                 Optics_t optics_sw_total;
@@ -288,8 +303,10 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
                     integrate(&(sw_flux_up[j*grid.n]), grid.n, grid.dw, &(flux_up_total[j]));
                     integrate(&(sw_flux_down[j*grid.n]), grid.n, grid.dw, &(flux_down_total[j]));
                 }
+/*
                 write_output(output, RSU, flux_up_total, t, i);
                 write_output(output, RSD, flux_down_total, t, i);
+*/
             }
             catch(destroy_optics(&optics_lw_total));
         }
@@ -327,7 +344,7 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
 }
 
 
-/*Main driver program.  When linking an executable, the use must provide an object file that
+/*Main driver program.  When linking an executable, the user must provide an object file that
   includes implementations for the following defined in driver.h:
    - struct output;
    - void close_flux_file(Output_t *output);
@@ -397,7 +414,7 @@ int main(int argc, char **argv)
         snprintf(buffer, valuelen, "%s", "output.nc");
     }
     Output_t *output;
-    create_flux_file(&output, buffer, &atm);
+    create_flux_file(&output, buffer, &atm, &lw_grid, &sw_grid);
 
     /*Calculate the fluxes over all the columns.*/
     catch(driver(atm, hitran_path, solar_flux_path, lw_grid, sw_grid, device, output));

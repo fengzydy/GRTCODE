@@ -551,7 +551,8 @@ static void add_flux_variable(Output_t * const o, /*Output object.*/
 
 /*Create an output file and write metadata.*/
 void create_flux_file(Output_t **output, char const * const filepath,
-                      Atmosphere_t const * const atm)
+                      Atmosphere_t const * const atm, SpectralGrid_t const * const lw_grid,
+                      SpectralGrid_t const * const sw_grid)
 {
     Output_t *file = (Output_t *)malloc(sizeof(*file));
     file->dimid = (int *)malloc(sizeof(*(file->dimid))*NUM_DIMS);

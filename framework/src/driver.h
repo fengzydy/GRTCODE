@@ -12,6 +12,16 @@ typedef enum VarId
     RLU,
     RSU,
     RSD,
+    H2OVMR,
+    O3VMR,
+    CH4VMR,
+    CO2VMR,
+    N2OVMR,
+    TAU,
+    TLEV,
+    TLAY,
+    PLEV,
+    TS,
     NUM_VARS
 } VarId_t;
 
@@ -81,7 +91,8 @@ typedef struct Output Output_t;
 void close_flux_file(Output_t * const output);
 
 
-void create_flux_file(Output_t **output, char const * const path, Atmosphere_t const * const atm);
+void create_flux_file(Output_t **output, char const * const path, Atmosphere_t const * const atm,
+                      SpectralGrid_t const * const lw_grid, SpectralGrid_t const * const sw_grid);
 
 
 Atmosphere_t create_atmosphere(Parser_t * const parser);

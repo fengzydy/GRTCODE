@@ -47,6 +47,9 @@ enum dimid
     LEVEL,
     LAT,
     LON,
+    LAYER,
+    LW_WAVENUMBER,
+    SW_WAVENUMBER,
     NUM_DIMS
 };
 
@@ -58,11 +61,19 @@ struct Output
     int *varid;
 };
 
+static char time_units[512];
+static double *times;
 
+static size_t global_num_lon;
 static size_t nlon;
+static double *lons;
+static char lon_units[512];
 static size_t nlat;
+static double *lats;
+static char lat_units[512];
 static size_t nlevel;
-
+static int x;
+static int X;
 
 /*Reorder from (t,z,y,x) to (t,y,x,z).*/
 static void tzyx_to_tyxz(fp_t *dest, fp_t *src, int nx, int ny, int nz, int nt)
@@ -116,21 +127,29 @@ static void tyxz_to_tzyx(fp_t *dest, fp_t *src, int nx, int ny, int nz, int nt)
 }
 
 
-
-
 /*Reserve memory and read in atmospheric data.*/
 Atmosphere_t create_atmosphere(Parser_t *parser)
 {
     /*Add/parse command line arguments.*/
     snprintf(parser->description, desclen,
              "Calculates the radiative fluxes for ERA5 reanalysis data.");
-    add_argument(parser, "level_file", NULL, "Input data file.", NULL);
-    add_argument(parser, "single_file", NULL, "Input data file.", NULL);
+    add_argument(parser, "era5_file", NULL, "Input data file.", NULL);
+    add_argument(parser, "ghg_file", NULL, "Greenhouse gase file.", NULL);
     int one = 1;
+    add_argument(parser, "-CFC-11", NULL, "Path to CFC-11 cross sections.", &one);
+    add_argument(parser, "-CFC-12", NULL, "Path to CFC-12 cross sections.", &one);
+    add_argument(parser, "-CFC-113", NULL, "Path to CFC-113 cross sections.", &one);
+    add_argument(parser, "-CH4", NULL, "Include methane.", NULL);
     add_argument(parser, "-clean", NULL, "Run without aerosols.", NULL);
     add_argument(parser, "-clear", NULL, "Run without clouds.", NULL);
-    add_argument(parser, "-H2O", NULL, "Include H2O.", NULL);
+    add_argument(parser, "-CO2", NULL, "Include carbon dioxide.", NULL);
+    add_argument(parser, "-HCFC-22", NULL, "Path to HCFC-22 cross sections.", &one);
+    add_argument(parser, "-H2O", NULL, "Include water vapor.", NULL);
     add_argument(parser, "-h2o-ctm", NULL, "Directory containing H2O continuum files", &one);
+    add_argument(parser, "-N2-N2", NULL, "Path to N2-N2 CIA cross sections.", &one);
+    add_argument(parser, "-N2O", NULL, "Include nitrous oxide.", NULL);
+    add_argument(parser, "-O2-N2", NULL, "Path to O2-N2 CIA cross sections.", &one);
+    add_argument(parser, "-O2-O2", NULL, "Path to O2-O2 CIA cross sections.", &one);
     add_argument(parser, "-O3", NULL, "Include O3.", NULL);
     add_argument(parser, "-o3-ctm", NULL, "Directory containing O3 continuum files", &one);
     add_argument(parser, "-t", "--time-lower-bound", "Starting time index.", &one);
@@ -138,14 +157,15 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     add_argument(parser, "-x", "--lon-lower-bound", "Starting longitude index.", &one);
     add_argument(parser, "-X", "--lon-upper-bound", "Ending longitude index.", &one);
     add_argument(parser, "-y", "--lat-lower-bound", "Starting latitude index.", &one);
+    add_argument(parser, "-year", NULL, "Year for gas abundances.", &one);
     add_argument(parser, "-Y", "--lat-upper-bound", "Ending latitude index.", &one);
     add_argument(parser, "-z", "--level-lower-bound", "Starting level index.", &one);
     add_argument(parser, "-Z", "--level-upper-bound", "Ending level index.", &one);
     parse_args(*parser);
 
-    /*Open the level input file.*/
+    /*Open the input file.*/
     char buffer[valuelen];
-    get_argument(*parser, "level_file", buffer);
+    get_argument(*parser, "era5_file", buffer);
     int ncid;
     nc_catch(nc_open(buffer, NC_NOWRITE, &ncid));
 
@@ -166,10 +186,16 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         T = (int)num_times - 1;
     }
     atm.num_times = T - t + 1;
+    alloc(times, atm.num_times, double *);
+    int varid;
+    nc_catch(nc_inq_varid(ncid, "time", &varid));
+    size_t start[4] = {t, 0, 0, 0};
+    size_t count[4] = {atm.num_times, 1, 1, 1};
+    get_var(ncid, varid, start, count, times);
+    nc_catch(nc_get_att_text(ncid, varid, "units", time_units));
 
     /*Determine the number of columns.*/
-    int x = get_argument(*parser, "-x", buffer) ? atoi(buffer) : 0;
-    int X;
+    x = get_argument(*parser, "-x", buffer) ? atoi(buffer) : 0;
     if (get_argument(*parser, "-X", buffer))
     {
         X = atoi(buffer);
@@ -182,6 +208,14 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         nc_catch(nc_inq_dimlen(ncid, dimid, &num_lon));
         X = (int)num_lon - 1;
     }
+    nlon = X - x + 1;
+    alloc(lons, nlon, double *);
+    nc_catch(nc_inq_varid(ncid, "lon", &varid));
+    start[0] = x; start[1] = 0; start[2] = 0; start[3] = 0;
+    count[0] = nlon; count[1] = 1; count[2] = 1; count[3] = 1;
+    get_var(ncid, varid, start, count, lons);
+    nc_catch(nc_get_att_text(ncid, varid, "units", lon_units));
+
     int y = get_argument(*parser, "-y", buffer) ? atoi(buffer) : 0;
     int Y;
     if (get_argument(*parser, "-Y", buffer))
@@ -196,8 +230,13 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         nc_catch(nc_inq_dimlen(ncid, dimid, &num_lat));
         Y = (int)num_lat - 1;
     }
-    nlon = X - x + 1;
     nlat = Y - y + 1;
+    alloc(lats, nlat, double *);
+    nc_catch(nc_inq_varid(ncid, "lat", &varid));
+    start[0] = y; start[1] = 0; start[2] = 0; start[3] = 0;
+    count[0] = nlat; count[1] = 1; count[2] = 1; count[3] = 1;
+    get_var(ncid, varid, start, count, lats);
+    nc_catch(nc_get_att_text(ncid, varid, "units", lat_units));
     atm.num_columns = nlon*nlat;
 
     /*Determine the number of levels.*/
@@ -210,7 +249,7 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     else
     {
         int dimid;
-        nc_catch(nc_inq_dimid(ncid, "level", &dimid));
+        nc_catch(nc_inq_dimid(ncid, "sigma_level", &dimid));
         size_t num_levels;
         nc_catch(nc_inq_dimlen(ncid, dimid, &num_levels));
         Z = (int)num_levels - 1;
@@ -223,24 +262,27 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     alloc(atm.level_pressure, atm.num_times*atm.num_columns*atm.num_levels, fp_t *);
     fp_t *pressure;
     alloc(pressure, atm.num_times*atm.num_levels*nlat*nlon, fp_t *);
-    int varid;
     nc_catch(nc_inq_varid(ncid, "p", &varid));
-    size_t start[4] = {t, z, y, x};
-    size_t count[4] = {atm.num_times, atm.num_levels, nlat, nlon};
+    start[0] = t; start[1] = z; start[2] = y; start[3] = x;
+    count[0] = atm.num_times; count[1] = atm.num_levels; count[2] = nlat; count[3] = nlon;
     get_var(ncid, varid, start, count, pressure);
     tzyx_to_tyxz(atm.level_pressure, pressure, nlon, nlat, atm.num_levels, atm.num_times);
     free(pressure);
     alloc(atm.layer_pressure, atm.num_times*atm.num_columns*atm.num_layers, fp_t *);
     int i;
-    for (i=0; i<atm.num_times*atm.num_columns; ++i)
+    for (i=0; i<atm.num_times; ++i)
     {
         int j;
-        for (j=0; j<atm.num_layers; ++j)
+        for (j=0; j<atm.num_columns; ++j)
         {
-            int offset1 = i*atm.num_layers + j;
-            int offset2 = i*atm.num_levels + j;
-            atm.layer_pressure[offset1] = 0.5*(atm.level_pressure[offset2] +
-                                               atm.level_pressure[offset2+1]);
+            int k;
+            for (k=0; k<atm.num_layers; ++k)
+            {
+                int offset1 = i*atm.num_columns*atm.num_layers + j*atm.num_layers + k;
+                int offset2 = i*atm.num_columns*atm.num_levels + j*atm.num_levels + k;
+                atm.layer_pressure[offset1] = 0.5*(atm.level_pressure[offset2] +
+                                                   atm.level_pressure[offset2+1]);
+            }
         }
     }
 
@@ -252,14 +294,6 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     start[0] = t; start[1] = z; start[2] = y; start[3] = x;
     count[0] = atm.num_times; count[1] = atm.num_levels; count[2] = nlat; count[3] = nlon;
     get_var(ncid, varid, start, count, temperature);
-    double scale;
-    double add;
-    nc_catch(nc_get_att_double(ncid, varid, "scale_factor", &scale));
-    nc_catch(nc_get_att_double(ncid, varid, "add_offset", &add));
-    for (i=0; i<atm.num_times*atm.num_levels*nlat*nlon; ++i)
-    {
-        temperature[i] = temperature[i]*scale + add;
-    }
     tzyx_to_tyxz(atm.level_temperature, temperature, nlon, nlat, atm.num_levels, atm.num_times);
     free(temperature);
     alloc(atm.layer_temperature, atm.num_times*atm.num_columns*atm.num_layers, fp_t *);
@@ -290,14 +324,14 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         char *flag;
         char *name;
     };
-    int const num_molecules = 2;
-    struct MoleculeMeta molecules[num_molecules] = {{H2O, "-H2O", "q"}, {O3, "-O3", "o3"}};
+    int const num_molecules = 5;
+    struct MoleculeMeta molecules[2] = {{H2O, "-H2O", "q"}, {O3, "-O3", "o3"}};
     alloc(atm.molecules, num_molecules, int *);
     atm.num_molecules = 0;
     alloc(atm.ppmv, num_molecules, fp_t **);
     fp_t *abundance;
     alloc(abundance, atm.num_times*atm.num_levels*nlat*nlon, fp_t *);
-    for (i=0; i<num_molecules; ++i)
+    for (i=0; i<2; ++i)
     {
         if (get_argument(*parser, molecules[i].flag, NULL))
         {
@@ -308,12 +342,10 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
             start[0] = t; start[1] = z; start[2] = y; start[3] = x;
             count[0] = atm.num_times; count[1] = atm.num_levels; count[2] = nlat; count[3] = nlon;
             get_var(ncid, varid, start, count, abundance);
-            nc_catch(nc_get_att_double(ncid, varid, "scale_factor", &scale));
-            nc_catch(nc_get_att_double(ncid, varid, "add_offset", &add));
             int j;
             for (j=0; j<atm.num_times*atm.num_levels*nlat*nlon; ++j)
             {
-                abundance[j] = (abundance[j]*scale + add)*to_ppmv;
+                abundance[j] *= to_ppmv;
             }
             tzyx_to_tyxz(ppmv, abundance, nlon, nlat, atm.num_levels, atm.num_times);
             atm.num_molecules++;
@@ -334,28 +366,16 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     atm.num_cias = 0;
     atm.num_cia_species = 0;
 
-    /*Close level file and open single file.*/
-    nc_catch(nc_close(ncid));
-    get_argument(*parser, "single_file", buffer);
-    nc_catch(nc_open(buffer, NC_NOWRITE, &ncid));
-
     /*Surface temperature.*/
     alloc(atm.surface_temperature, atm.num_times*atm.num_columns, fp_t *);
     nc_catch(nc_inq_varid(ncid, "skt", &varid));
     start[0] = t; start[1] = y; start[2] = x; start[3] = 0;
     count[0] = atm.num_times; count[1] = nlat; count[2] = nlon; count[3] = 1;
     get_var(ncid, varid, start, count, atm.surface_temperature);
-    nc_catch(nc_get_att_double(ncid, varid, "scale_factor", &scale));
-    nc_catch(nc_get_att_double(ncid, varid, "add_offset", &add));
-    for (i=0; i<atm.num_times*atm.num_columns; ++i)
-    {
-        atm.surface_temperature[i] = atm.surface_temperature[i]*scale + add;
-    }
 
     /*Calculate the cosine of the solar zenith angle from the solar irradiance.*/
     int dimid;
     nc_catch(nc_inq_dimid(ncid, "lon", &dimid));
-    size_t global_num_lon;
     nc_catch(nc_inq_dimlen(ncid, dimid, &global_num_lon));
     nc_catch(nc_inq_dimid(ncid, "lat", &dimid));
     size_t global_num_lat;
@@ -381,8 +401,6 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     start[0] = t; start[1] = 0; start[2] = 0; start[3] = 0;
     count[0] = atm.num_times; count[1] = global_num_lat; count[2] = global_num_lon; count[3] = 1;
     get_var(ncid, varid, start, count, irradiance);
-    nc_catch(nc_get_att_double(ncid, varid, "scale_factor", &scale));
-    nc_catch(nc_get_att_double(ncid, varid, "add_offset", &add));
     fp_t *mean_irradiance;
     alloc(mean_irradiance, atm.num_times, fp_t *);
     fp_t const seconds_per_day = 86400.;
@@ -397,7 +415,7 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
             for (k=0; k<global_num_lon; ++k)
             {
                 int offset = i*global_num_lat*global_num_lon + j*global_num_lon + k;
-                irradiance[offset] = (irradiance[offset]*scale + add)/seconds_per_day;
+                irradiance[offset] /= seconds_per_day;
                 running_sum += irradiance[offset];
             }
             mean_irradiance[i] += (running_sum/global_num_lon)*(weights[j]/total_weight);
@@ -416,7 +434,10 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
             {
                 int offset1 = i*nlat*nlon + j*nlon + k;
                 int offset2 = i*global_num_lat*global_num_lon + (j+y)*global_num_lon + k+x;
+/*
                 atm.solar_zenith_angle[offset1] = irradiance[offset2]/mean_irradiance[i];
+*/
+                atm.solar_zenith_angle[offset1] = -1.;
             }
         }
     }
@@ -429,12 +450,9 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     start[0] = t; start[1] = y; start[2] = x; start[3] = 0;
     count[0] = atm.num_times; count[1] = nlat; count[2] = nlon; count[3] = 1;
     get_var(ncid, varid, start, count, atm.total_solar_irradiance);
-    nc_catch(nc_get_att_double(ncid, varid, "scale_factor", &scale));
-    nc_catch(nc_get_att_double(ncid, varid, "add_offset", &add));
     for (i=0; i<atm.num_times*atm.num_columns; ++i)
     {
-        atm.total_solar_irradiance[i] = (atm.total_solar_irradiance[i]*scale + add)/
-                                        (seconds_per_day*atm.solar_zenith_angle[i]);
+        atm.total_solar_irradiance[i] /= seconds_per_day*atm.solar_zenith_angle[i];
     }
 
     /*Surface albedo.*/
@@ -447,29 +465,18 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     alloc(atm.surface_albedo, atm.num_times*atm.num_columns*atm.albedo_grid_size, fp_t *);
     fp_t *albedo;
     alloc(albedo, atm.num_times*atm.num_columns, fp_t *);
-    nc_catch(nc_inq_varid(ncid, "alnip", &varid));
+    nc_catch(nc_inq_varid(ncid, "fal", &varid));
     start[0] = t; start[1] = y; start[2] = x; start[3] = 0;
     count[0] = atm.num_times; count[1] = nlat; count[2] = nlon; count[3] = 1;
     get_var(ncid, varid, start, count, albedo);
-    nc_catch(nc_get_att_double(ncid, varid, "scale_factor", &scale));
-    nc_catch(nc_get_att_double(ncid, varid, "add_offset", &add));
     for (i=0; i<atm.num_times*atm.num_columns; ++i)
     {
-        atm.surface_albedo[i*atm.albedo_grid_size] = albedo[i]*scale + add;
-    }
-    nc_catch(nc_inq_varid(ncid, "aluvp", &varid));
-    start[0] = t; start[1] = y; start[2] = x; start[3] = 0;
-    count[0] = atm.num_times; count[1] = nlat; count[2] = nlon; count[3] = 1;
-    get_var(ncid, varid, start, count, albedo);
-    nc_catch(nc_get_att_double(ncid, varid, "scale_factor", &scale));
-    nc_catch(nc_get_att_double(ncid, varid, "add_offset", &add));
-    for (i=0; i<atm.num_times*atm.num_columns; ++i)
-    {
-        atm.surface_albedo[i*atm.albedo_grid_size+1] = albedo[i]*scale + add;
+        atm.surface_albedo[i*atm.albedo_grid_size] = albedo[i];
+        atm.surface_albedo[i*atm.albedo_grid_size + 1] = albedo[i];
     }
     free(albedo);
 
-    /*Close single file.*/
+    /*Close the era5 file.*/
     nc_catch(nc_close(ncid));
 
     /*Surface emissivity. CIRC cases assume this is 1.*/
@@ -480,6 +487,138 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     alloc(atm.surface_emissivity, atm.emissivity_grid_size, fp_t *);
     atm.surface_emissivity[0] = 0.98;
     atm.surface_emissivity[1] = atm.surface_emissivity[0];
+
+    /*Open the greenhouse gas file.*/
+    get_argument(*parser, "ghg_file", buffer);
+    nc_catch(nc_open(buffer, NC_NOWRITE, &ncid));
+    get_argument(*parser, "-year", buffer);
+    int year = atoi(buffer);
+
+    /*Greenhouse gas abundances.*/
+    struct MoleculeMeta ghg_molecules[3] = {{CH4, "-CH4", "ch4"},
+                                            {CO2, "-CO2", "co2"},
+                                            {N2O, "-N2O", "n2o"}};
+    alloc(abundance, atm.num_times*atm.num_levels*nlat*nlon, fp_t *);
+    for (i=0; i<3; ++i)
+    {
+        if (get_argument(*parser, ghg_molecules[i].flag, NULL))
+        {
+            atm.molecules[atm.num_molecules] = ghg_molecules[i].id;
+            alloc(atm.ppmv[atm.num_molecules], atm.num_times*atm.num_columns*atm.num_levels, fp_t *);
+            fp_t *ppmv = atm.ppmv[atm.num_molecules];
+            nc_catch(nc_inq_varid(ncid, ghg_molecules[i].name, &varid));
+            start[0] = year - 1; start[1] = 0; start[2] = 0; start[3] = 0;
+            count[0] = 1; count[1] = 1; count[2] = 1; count[3] = 1;
+            fp_t ab_in;
+            get_var(ncid, varid, start, count, &ab_in);
+            int j;
+            for (j=0; j<atm.num_times*atm.num_levels*nlat*nlon; ++j)
+            {
+                abundance[j] = ab_in;
+            }
+            tzyx_to_tyxz(ppmv, abundance, nlon, nlat, atm.num_levels, atm.num_times);
+            atm.num_molecules++;
+        }
+    }
+    free(abundance);
+
+    /*CFC abundances.*/
+    atm.num_cfcs = 0;
+/*
+    int const num_cfcs = 4;
+    struct MoleculeMeta cfcs[num_cfcs] = {{CFC11, "-CFC-11", "f11"},
+                                          {CFC12, "-CFC-12", "f12"},
+                                          {HCFC22, "-HCFC-22", "f22"},
+                                          {CFC113, "-CFC-113", "f113"}};
+    alloc(abundance, atm.num_times*atm.num_levels*nlat*nlon, fp_t *);
+    alloc(atm.cfc, num_cfcs, Cfc_t *);
+    alloc(atm.cfc_ppmv, num_cfcs, fp_t **);
+    for (i=0; i<num_cfcs; ++i)
+    {
+        if (get_argument(*parser, cfcs[i].flag, atm.cfc[atm.num_cfcs].path))
+        {
+            atm.cfc[atm.num_cfcs].id = cfcs[i].id;
+            alloc(atm.cfc_ppmv[atm.num_cfcs], atm.num_times*atm.num_levels*atm.num_columns, fp_t *);
+            nc_catch(nc_inq_varid(ncid, cfcs[i].name, &varid));
+            start[0] = year - 1; start[1] = 0; start[2] = 0; start[3] = 0;
+            count[0] = 1; count[1] = 1; count[2] = 1; count[3] = 1;
+            fp_t ab_in;
+            get_var(ncid, varid, start, count, &ab_in);
+            fp_t *ppmv = atm.cfc_ppmv[atm.num_cfcs];
+            int j;
+            for (j=0; j<atm.num_times*atm.num_levels*nlat*nlon; ++j)
+            {
+                abundance[j] = ab_in;
+            }
+            tzyx_to_tyxz(ppmv, abundance, nlon, nlat, atm.num_levels, atm.num_times);
+            atm.num_cfcs++;
+        }
+    }
+    free(abundance);
+*/
+
+    /*Collision-induced absorption (CIA) abundances.*/
+    atm.num_cias = 0;
+    atm.num_cia_species = 0;
+/*
+    int const num_cias = 3;
+    int const num_cia_species = 2;
+    struct CiaMeta
+    {
+        int species1;
+        int species2;
+        char *flag;
+    };
+    struct CiaMeta cias[num_cias] = {{CIA_N2, CIA_N2, "-N2-N2"},
+                                     {CIA_O2, CIA_N2, "-O2-N2"},
+                                     {CIA_O2, CIA_O2, "-O2-O2"}};
+    alloc(atm.cia, num_cias, Cia_t *);
+    alloc(atm.cia_species, num_cia_species, int *);
+    alloc(atm.cia_ppmv, num_cia_species, fp_t **);
+    for (i=0; i<num_cias; ++i)
+    {
+        if (get_argument(*parser, cias[i].flag, atm.cia[atm.num_cias].path))
+        {
+            atm.cia[atm.num_cias].id[0] = cias[i].species1;
+            atm.cia[atm.num_cias].id[1] = cias[i].species2;
+            int j;
+            for (j=0; j<2; ++j)
+            {
+                int k;
+                for (k=0; k<atm.num_cia_species; ++k)
+                {
+                    if (atm.cia[atm.num_cias].id[j] == atm.cia_species[k])
+                    {
+                        break;
+                    }
+                }
+                if (k >= atm.num_cia_species)
+                {
+                    atm.cia_species[atm.num_cia_species] = atm.cia[atm.num_cias].id[j];
+                    alloc(atm.cia_ppmv[atm.num_cia_species], atm.num_times*atm.num_levels*atm.num_columns, fp_t *);
+                    fp_t *ppmv = atm.cia_ppmv[atm.num_cia_species];
+                    if (atm.cia_species[atm.num_cia_species] == CIA_N2)
+                    {
+                        for (k=0; k<atm.num_times*atm.num_columns*atm.num_levels; ++k)
+                        {
+                            ppmv[k] = 0.781*to_ppmv;
+                        }
+                    }
+                    else if (atm.cia_species[atm.num_cia_species] == CIA_O2)
+                    {
+                        for (k=0; k<atm.num_times*atm.num_columns*atm.num_levels; ++k)
+                        {
+                            ppmv[k] = 0.21*to_ppmv;
+                        }
+                    }
+                    atm.num_cia_species++;
+                }
+            }
+            atm.num_cias++;
+        }
+    }
+*/
+    nc_catch(nc_close(ncid));
 
     /*Aerosols.*/
     atm.clean = 1;
@@ -551,6 +690,7 @@ static void add_flux_variable(Output_t * const o, /*Output object.*/
                               VarId_t const index, /*Variable index.*/
                               char const * const name, /*Variable name.*/
                               char const * const standard_name, /*Variable standard name.*/
+                              char const * const units, /*Units.*/
                               fp_t const * const fill_value /*Fill value.*/
                              )
 {
@@ -560,9 +700,9 @@ static void add_flux_variable(Output_t * const o, /*Output object.*/
     nc_type type = NC_DOUBLE;
 #endif
     int varid;
-    nc_catch(nc_def_var(o->ncid, name, type, NUM_DIMS, o->dimid, &varid));
-    char *unit = "W m-2";
-    nc_catch(nc_put_att_text(o->ncid, varid, "units", strlen(unit), unit));
+    int dimids[4] = {o->dimid[TIME], o->dimid[LEVEL], o->dimid[LAT], o->dimid[LON]};
+    nc_catch(nc_def_var(o->ncid, name, type, 4, dimids, &varid));
+    nc_catch(nc_put_att_text(o->ncid, varid, "units", strlen(units), units));
     nc_catch(nc_put_att_text(o->ncid, varid, "standard_name", strlen(standard_name),
                              standard_name));
     if (fill_value != NULL)
@@ -580,21 +720,107 @@ static void add_flux_variable(Output_t * const o, /*Output object.*/
 
 /*Create an output file and write metadata.*/
 void create_flux_file(Output_t **output, char const * const filepath,
-                      Atmosphere_t const * const atm)
+                      Atmosphere_t const * const atm, SpectralGrid_t const * const lw_grid,
+                      SpectralGrid_t const * const sw_grid)
 {
     Output_t *file = (Output_t *)malloc(sizeof(*file));
     file->dimid = (int *)malloc(sizeof(*(file->dimid))*NUM_DIMS);
     file->varid = (int *)malloc(sizeof(*(file->varid))*NUM_VARS);
     nc_catch(nc_create(filepath, NC_NETCDF4, &(file->ncid)));
+    nc_catch(nc_put_att_int(file->ncid, NC_GLOBAL, "lon_start", NC_INT, 1, &x));
+    nc_catch(nc_put_att_int(file->ncid, NC_GLOBAL, "lon_stop", NC_INT, 1, &X));
+    int lon_size = (int)global_num_lon;
+    nc_catch(nc_put_att_int(file->ncid, NC_GLOBAL, "lon_global_size", NC_INT, 1, &lon_size));
+
     nc_catch(nc_def_dim(file->ncid, "time", atm->num_times, &(file->dimid[TIME])));
+    int varid;
+    nc_catch(nc_def_var(file->ncid, "time", NC_DOUBLE, 1, &(file->dimid[TIME]), &varid));
+    nc_catch(nc_put_att_text(file->ncid, varid, "units", strlen(time_units), time_units));
+    nc_catch(nc_put_att_text(file->ncid, varid, "axis", 1, "T"));
+    size_t start[1] = {0};
+    size_t count[1] = {atm->num_times};
+    nc_catch(nc_put_vara_double(file->ncid, varid, start, count, times));
+
     nc_catch(nc_def_dim(file->ncid, "level", atm->num_levels, &(file->dimid[LEVEL])));
+
     nc_catch(nc_def_dim(file->ncid, "lat", nlat, &(file->dimid[LAT])));
+    nc_catch(nc_def_var(file->ncid, "lat", NC_DOUBLE, 1, &(file->dimid[LAT]), &varid));
+    nc_catch(nc_put_att_text(file->ncid, varid, "units", strlen(lat_units), lat_units));
+    nc_catch(nc_put_att_text(file->ncid, varid, "axis", 1, "Y"));
+    start[0] = 0; count[0] = nlat;
+    nc_catch(nc_put_vara_double(file->ncid, varid, start, count, lats));
+
     nc_catch(nc_def_dim(file->ncid, "lon", nlon, &(file->dimid[LON])));
-    add_flux_variable(file, RLU, "rlu", "upwelling_longwave_flux_in_air", NULL);
-    add_flux_variable(file, RLD, "rld", "downwelling_longwave_flux_in_air", NULL);
-    fp_t const zero = 0;
-    add_flux_variable(file, RSU, "rsu", "upwelling_shortwave_flux_in_air", &zero);
-    add_flux_variable(file, RSD, "rsd", "downwelling_shortwave_flux_in_air", &zero);
+    nc_catch(nc_def_var(file->ncid, "lon", NC_DOUBLE, 1, &(file->dimid[LON]), &varid));
+    nc_catch(nc_put_att_text(file->ncid, varid, "units", strlen(lon_units), lon_units));
+    nc_catch(nc_put_att_text(file->ncid, varid, "axis", 1, "X"));
+    start[0] = 0; count[0] = nlon;
+    nc_catch(nc_put_vara_double(file->ncid, varid, start, count, lons));
+
+    nc_catch(nc_def_dim(file->ncid, "layer", atm->num_layers, &(file->dimid[LAYER])));
+
+/*
+    nc_catch(nc_def_dim(file->ncid, "wavenumber", lw_grid->n, &(file->dimid[LW_WAVENUMBER])));
+    nc_catch(nc_def_var(file->ncid, "wavenumber", NC_DOUBLE, 1,
+             &(file->dimid[LW_WAVENUMBER]), &varid));
+    char *units = "cm-1";
+    nc_catch(nc_put_att_text(file->ncid, varid, "units", strlen(units), units));
+    start[0] = 0; count[0] = lw_grid->n;
+    double grid[lw_grid->n];
+    size_t i;
+    for (i=0; i<lw_grid->n; ++i)
+    {
+        grid[i] = lw_grid->w0 + i*lw_grid->dw;
+    }
+    nc_catch(nc_put_vara_double(file->ncid, varid, start, count, grid));
+*/
+
+    fp_t const fill = -1;
+    add_flux_variable(file, RLU, "rlu", "upwelling_longwave_flux_in_air", "W m-2", &fill);
+    add_flux_variable(file, RLD, "rld", "downwelling_longwave_flux_in_air", "W m-2", &fill);
+    add_flux_variable(file, RSU, "rsu", "upwelling_shortwave_flux_in_air", "W m-2", &fill);
+    add_flux_variable(file, RSD, "rsd", "downwelling_shortwave_flux_in_air", "W m-2", &fill);
+
+    add_flux_variable(file, PLEV, "p", "air_pressure", "mb", NULL);
+    add_flux_variable(file, TLEV, "t", "air_temperature", "K", NULL);
+    add_flux_variable(file, H2OVMR, "h2o_vmr", "water_vapor_vmr", "ppmv", NULL);
+    add_flux_variable(file, O3VMR, "o3_vmr", "ozone_vmr", "ppmv", NULL);
+    add_flux_variable(file, CH4VMR, "ch4_vmr", "methane_vmr", "ppmv", NULL);
+    add_flux_variable(file, CO2VMR, "co2_vmr", "carbon_dioxide_vmr", "ppmv", NULL);
+    add_flux_variable(file, N2OVMR, "n2o_vmr", "nitrous_oxide_vmr", "ppmv", NULL);
+
+
+#ifdef SINGLE_PRESCISION
+    nc_type type = NC_FLOAT;
+#else
+    nc_type type = NC_DOUBLE;
+#endif
+    int dimids[5] = {file->dimid[TIME], file->dimid[LAT], file->dimid[LON]};
+    nc_catch(nc_def_var(file->ncid, "ts", type, 3, dimids, &(file->varid[TS])));
+    char *standard_name = "surface_temperature";
+    nc_catch(nc_put_att_text(file->ncid, file->varid[TS], "standard_name", strlen(standard_name),
+                             standard_name));
+    char *units = "K";
+    nc_catch(nc_put_att_text(file->ncid, file->varid[TS], "units", strlen(units), units));
+
+    dimids[0] = file->dimid[TIME]; dimids[1] = file->dimid[LAYER];
+    dimids[2] = file->dimid[LAT]; dimids[3] = file->dimid[LON];
+    nc_catch(nc_def_var(file->ncid, "t_layer", type, 4, dimids, &(file->varid[TLAY])));
+    standard_name = "air_layer_temperature";
+    nc_catch(nc_put_att_text(file->ncid, file->varid[TLAY], "standard_name", strlen(standard_name),
+                             standard_name));
+    units = "K";
+    nc_catch(nc_put_att_text(file->ncid, file->varid[TLAY], "units", strlen(units), units));
+
+/*
+    dimids[0] = file->dimid[TIME]; dimids[1] = file->dimid[LAYER]; dimids[2] = file->dimid[LAT];
+    dimids[3] = file->dimid[LON]; dimids[4] = file->dimid[LW_WAVENUMBER];
+    nc_catch(nc_def_var(file->ncid, "tau", type, 5, dimids, &(file->varid[TAU])));
+    standard_name = "lw_optical_depth";
+    nc_catch(nc_put_att_text(file->ncid, file->varid[TAU], "standard_name", strlen(standard_name),
+                             standard_name));
+*/
+
     *output = file;
     return;
 }
@@ -613,16 +839,58 @@ void close_flux_file(Output_t * const o)
 /*Write fluxes to the output file.*/
 void write_output(Output_t *output, VarId_t id, fp_t *data, int time, int column)
 {
-    size_t num_levels;
-    nc_catch(nc_inq_dimlen(output->ncid, output->dimid[LEVEL], &num_levels));
     int lat = column/nlon;
     int lon = column - nlon*lat;
-    size_t start[4] = {time, 0, lat, lon};
-    size_t count[4] = {1, nlevel, 1, 1};
+
+    printf("%d, %d, %d, %d\n", time, column, lat, lon);
+
+    if (id == TAU)
+    {
+        size_t num_layers;
+        nc_catch(nc_inq_dimlen(output->ncid, output->dimid[LAYER], &num_layers));
+        size_t nw;
+        nc_catch(nc_inq_dimlen(output->ncid, output->dimid[LW_WAVENUMBER], &nw));
+        size_t start[5] = {time, 0, lat, lon, 0};
+        size_t count[5] = {1, num_layers, 1, 1, nw};
 #ifdef SINGLE_PRECISION
-    nc_catch(nc_put_vara_float(output->ncid, output->varid[id], start, count, data))
+        nc_catch(nc_put_vara_float(output->ncid, output->varid[id], start, count, data));
 #else
-    nc_catch(nc_put_vara_double(output->ncid, output->varid[id], start, count, data))
+        nc_catch(nc_put_vara_double(output->ncid, output->varid[id], start, count, data));
 #endif
+    }
+    else if (id == TS)
+    {
+        size_t start[3] = {time, lat, lon};
+        size_t count[3] = {1, 1, 1};
+#ifdef SINGLE_PRECISION
+        nc_catch(nc_put_vara_float(output->ncid, output->varid[id], start, count, data));
+#else
+        nc_catch(nc_put_vara_double(output->ncid, output->varid[id], start, count, data));
+#endif
+    }
+    else if (id == TLAY)
+    {
+        size_t num_layers;
+        nc_catch(nc_inq_dimlen(output->ncid, output->dimid[LAYER], &num_layers));
+        size_t start[4] = {time, 0, lat, lon};
+        size_t count[4] = {1, num_layers, 1, 1};
+#ifdef SINGLE_PRECISION
+        nc_catch(nc_put_vara_float(output->ncid, output->varid[id], start, count, data));
+#else
+        nc_catch(nc_put_vara_double(output->ncid, output->varid[id], start, count, data));
+#endif
+    }
+    else
+    {
+        size_t num_levels;
+        nc_catch(nc_inq_dimlen(output->ncid, output->dimid[LEVEL], &num_levels));
+        size_t start[4] = {time, 0, lat, lon};
+        size_t count[4] = {1, num_levels, 1, 1};
+#ifdef SINGLE_PRECISION
+        nc_catch(nc_put_vara_float(output->ncid, output->varid[id], start, count, data));
+#else
+        nc_catch(nc_put_vara_double(output->ncid, output->varid[id], start, count, data));
+#endif
+    }
     return;
 }

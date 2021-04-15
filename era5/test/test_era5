@@ -1,10 +1,39 @@
 #!/bin/bash -x
-export OMP_NUM_THREADS="4"
+export OMP_NUM_THREADS="32"
 declare datadir="../../grtcode-data"
-declare eradatadir="../../../era5/"
+declare eradatadir="/lustre/f2/pdata/gfdl/gfdl_M/Raymond.Menzel/era5-prp"
 
-../src/era5 $datadir/HITRAN_files/hitran2016.par $datadir/solar_flux/solar_flux.csv -v \
-  $eradatadir/remapped-level.nc $eradatadir/remapped-single.nc -H2O -O3 \
-  -h2o-ctm $datadir/water_vapor_continuum -o3-ctm $datadir/ozone_continuum/ozone_continuum.csv \
-  -o "output.era5.nc" -s 2stream \
-  -x 0 -X 0 -y 0 -Y 0 -t 0 -T 0
+declare basename="output.era5.nc"
+declare year="2010"
+declare month="3"
+
+for i in `seq 1 6`; do
+  x=$((($i - 1)*24))
+  X=$(($x + 23))
+# x=$((($i - 1)*4))
+# X=$(($x + 15))
+  time srun -n 1 --cpus-per-task="$OMP_NUM_THREADS" ../src/era5 \
+    $datadir/HITRAN_files/hitran2016.par \
+    $datadir/solar_flux/solar_flux.csv -v \
+    $eradatadir/2010-era5.nc \
+    /lustre/f2/pdata/gfdl/gfdl_M/Raymond.Menzel/green-house-gases.nc \
+    -H2O -O3 -CH4 -CO2 -N2O -year $year \
+    -h2o-ctm $datadir/water_vapor_continuum \
+    -o3-ctm $datadir/ozone_continuum/ozone_continuum.csv \
+    -CFC-11 $datadir/cfc_cross_sections/CFC-11_absorption_cross_sections.csv \
+    -CFC-12 $datadir/cfc_cross_sections/CFC-12_absorption_cross_sections.csv \
+    -CFC-113 $datadir/cfc_cross_sections/CFC-113_absorption_cross_sections.csv \
+    -HCFC-22 $datadir/cfc_cross_sections/HCFC-22_absorption_cross_sections.csv \
+    -N2-N2 $datadir/collision_induced_absorption/N2-N2.csv \
+    -O2-N2 $datadir/collision_induced_absorption/O2-N2.csv \
+    -O2-O2 $datadir/collision_induced_absorption/O2-O2.csv \
+    -o "${basename}.segment${i}" \
+    -w-lw 1 -W-lw 3000 -r-lw 1.0 \
+    -x $x -X $X -t $month -T $month &
+#   -w-sw 1 -W-sw 2 -r-sw 1 -s 2stream -clean -clear \
+done
+
+wait
+
+source env/bin/activate
+python3 combine-segments.py $basename foo.nc
