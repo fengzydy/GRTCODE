@@ -262,9 +262,7 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
             }
             write_output(output, RLU, flux_up_total, t, i);
             write_output(output, RLD, flux_down_total, t, i);
-/*
             write_output(output, TAU, optics_lw_total.tau, t, i);
-*/
             write_output(output, PLEV, &(atm.level_pressure[(offset + i)*atm.num_levels]), t, i);
             write_output(output, TLEV, &(atm.level_temperature[(offset + i)*atm.num_levels]), t, i);
             write_output(output, TLAY, &(atm.layer_temperature[(offset + i)*atm.num_layers]), t, i);
@@ -303,10 +301,8 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
                     integrate(&(sw_flux_up[j*grid.n]), grid.n, grid.dw, &(flux_up_total[j]));
                     integrate(&(sw_flux_down[j*grid.n]), grid.n, grid.dw, &(flux_down_total[j]));
                 }
-/*
                 write_output(output, RSU, flux_up_total, t, i);
                 write_output(output, RSD, flux_down_total, t, i);
-*/
             }
             catch(destroy_optics(&optics_lw_total));
         }

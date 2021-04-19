@@ -318,14 +318,17 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
 
     /*Molecular abundances.*/
     fp_t const to_ppmv = 1.e6;
+    fp_t const dry_air_mass = 28.97;
     struct MoleculeMeta
     {
         int id;
         char *flag;
         char *name;
+        fp_t mass;
     };
     int const num_molecules = 5;
-    struct MoleculeMeta molecules[2] = {{H2O, "-H2O", "q"}, {O3, "-O3", "o3"}};
+    struct MoleculeMeta molecules[2] = {{H2O, "-H2O", "q", 18.01528},
+                                        {O3, "-O3", "o3", 48.}};
     alloc(atm.molecules, num_molecules, int *);
     atm.num_molecules = 0;
     alloc(atm.ppmv, num_molecules, fp_t **);
@@ -345,7 +348,7 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
             int j;
             for (j=0; j<atm.num_times*atm.num_levels*nlat*nlon; ++j)
             {
-                abundance[j] *= to_ppmv;
+                abundance[j] *= to_ppmv*(dry_air_mass/molecules[i].mass);
             }
             tzyx_to_tyxz(ppmv, abundance, nlon, nlat, atm.num_levels, atm.num_times);
             atm.num_molecules++;
@@ -484,9 +487,11 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     alloc(atm.emissivity_grid, atm.emissivity_grid_size, fp_t *);
     atm.emissivity_grid[0] = -1.;
     atm.emissivity_grid[1] = 0.;
-    alloc(atm.surface_emissivity, atm.emissivity_grid_size, fp_t *);
-    atm.surface_emissivity[0] = 0.98;
-    atm.surface_emissivity[1] = atm.surface_emissivity[0];
+    alloc(atm.surface_emissivity, atm.num_times*atm.num_columns*atm.emissivity_grid_size, fp_t *);
+    for (i=0; i<atm.num_times*atm.num_columns*atm.emissivity_grid_size; ++i)
+    {
+        atm.surface_emissivity[i] = 0.98;
+    }
 
     /*Open the greenhouse gas file.*/
     get_argument(*parser, "ghg_file", buffer);
@@ -495,9 +500,9 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     int year = atoi(buffer);
 
     /*Greenhouse gas abundances.*/
-    struct MoleculeMeta ghg_molecules[3] = {{CH4, "-CH4", "ch4"},
-                                            {CO2, "-CO2", "co2"},
-                                            {N2O, "-N2O", "n2o"}};
+    struct MoleculeMeta ghg_molecules[3] = {{CH4, "-CH4", "ch4", 0.},
+                                            {CO2, "-CO2", "co2", 0.},
+                                            {N2O, "-N2O", "n2o", 0.}};
     alloc(abundance, atm.num_times*atm.num_levels*nlat*nlon, fp_t *);
     for (i=0; i<3; ++i)
     {
@@ -524,12 +529,11 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
 
     /*CFC abundances.*/
     atm.num_cfcs = 0;
-/*
     int const num_cfcs = 4;
-    struct MoleculeMeta cfcs[num_cfcs] = {{CFC11, "-CFC-11", "f11"},
-                                          {CFC12, "-CFC-12", "f12"},
-                                          {HCFC22, "-HCFC-22", "f22"},
-                                          {CFC113, "-CFC-113", "f113"}};
+    struct MoleculeMeta cfcs[num_cfcs] = {{CFC11, "-CFC-11", "f11", 0.},
+                                          {CFC12, "-CFC-12", "f12", 0.},
+                                          {HCFC22, "-HCFC-22", "f22", 0.},
+                                          {CFC113, "-CFC-113", "f113", 0.}};
     alloc(abundance, atm.num_times*atm.num_levels*nlat*nlon, fp_t *);
     alloc(atm.cfc, num_cfcs, Cfc_t *);
     alloc(atm.cfc_ppmv, num_cfcs, fp_t **);
@@ -555,12 +559,10 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         }
     }
     free(abundance);
-*/
 
     /*Collision-induced absorption (CIA) abundances.*/
     atm.num_cias = 0;
     atm.num_cia_species = 0;
-/*
     int const num_cias = 3;
     int const num_cia_species = 2;
     struct CiaMeta
@@ -617,7 +619,6 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
             atm.num_cias++;
         }
     }
-*/
     nc_catch(nc_close(ncid));
 
     /*Aerosols.*/
@@ -759,7 +760,6 @@ void create_flux_file(Output_t **output, char const * const filepath,
 
     nc_catch(nc_def_dim(file->ncid, "layer", atm->num_layers, &(file->dimid[LAYER])));
 
-/*
     nc_catch(nc_def_dim(file->ncid, "wavenumber", lw_grid->n, &(file->dimid[LW_WAVENUMBER])));
     nc_catch(nc_def_var(file->ncid, "wavenumber", NC_DOUBLE, 1,
              &(file->dimid[LW_WAVENUMBER]), &varid));
@@ -773,7 +773,6 @@ void create_flux_file(Output_t **output, char const * const filepath,
         grid[i] = lw_grid->w0 + i*lw_grid->dw;
     }
     nc_catch(nc_put_vara_double(file->ncid, varid, start, count, grid));
-*/
 
     fp_t const fill = -1;
     add_flux_variable(file, RLU, "rlu", "upwelling_longwave_flux_in_air", "W m-2", &fill);
@@ -800,7 +799,7 @@ void create_flux_file(Output_t **output, char const * const filepath,
     char *standard_name = "surface_temperature";
     nc_catch(nc_put_att_text(file->ncid, file->varid[TS], "standard_name", strlen(standard_name),
                              standard_name));
-    char *units = "K";
+    units = "K";
     nc_catch(nc_put_att_text(file->ncid, file->varid[TS], "units", strlen(units), units));
 
     dimids[0] = file->dimid[TIME]; dimids[1] = file->dimid[LAYER];
@@ -812,14 +811,12 @@ void create_flux_file(Output_t **output, char const * const filepath,
     units = "K";
     nc_catch(nc_put_att_text(file->ncid, file->varid[TLAY], "units", strlen(units), units));
 
-/*
     dimids[0] = file->dimid[TIME]; dimids[1] = file->dimid[LAYER]; dimids[2] = file->dimid[LAT];
     dimids[3] = file->dimid[LON]; dimids[4] = file->dimid[LW_WAVENUMBER];
     nc_catch(nc_def_var(file->ncid, "tau", type, 5, dimids, &(file->varid[TAU])));
     standard_name = "lw_optical_depth";
     nc_catch(nc_put_att_text(file->ncid, file->varid[TAU], "standard_name", strlen(standard_name),
                              standard_name));
-*/
 
     *output = file;
     return;
@@ -841,9 +838,6 @@ void write_output(Output_t *output, VarId_t id, fp_t *data, int time, int column
 {
     int lat = column/nlon;
     int lon = column - nlon*lat;
-
-    printf("%d, %d, %d, %d\n", time, column, lat, lon);
-
     if (id == TAU)
     {
         size_t num_layers;
