@@ -25,6 +25,13 @@ typedef enum VarId
     TLAY,
     PLEV,
     TS,
+    RLDSAF,
+    RLUSAF,
+    RLUTAF,
+    RLDSCSAF,
+    RLUSCSAF,
+    RLUTCSAF,
+    TAUZ,
     NUM_VARS
 } VarId_t;
 

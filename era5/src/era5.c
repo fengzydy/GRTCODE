@@ -591,7 +591,7 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     alloc(atm.surface_emissivity, atm.num_times*atm.num_columns*atm.emissivity_grid_size, fp_t *);
     for (i=0; i<atm.num_times*atm.num_columns*atm.emissivity_grid_size; ++i)
     {
-        atm.surface_emissivity[i] = 0.98;
+        atm.surface_emissivity[i] = 1.;
     }
 
     /*Open the greenhouse gas file.*/
@@ -877,6 +877,7 @@ void create_flux_file(Output_t **output, char const * const filepath,
     nc_catch(nc_put_vara_double(file->ncid, varid, start, count, grid));
 
     fp_t const fill = -1;
+/*
     add_flux_variable(file, RLUAF, "rluaf", "upwelling_aerosol_free_longwave_flux_in_air",
                       "W m-2", &fill, 5);
     add_flux_variable(file, RLUCSAF, "rlucsaf",
@@ -887,6 +888,7 @@ void create_flux_file(Output_t **output, char const * const filepath,
     add_flux_variable(file, RLDCSAF, "rldcsaf",
                       "downwelling_clear_sky_aerosol_free_longwave_flux_in_air",
                       "W m-2", &fill, 5);
+*/
     add_flux_variable(file, PLEV, "p", "air_pressure", "mb", NULL, 4);
     add_flux_variable(file, TLEV, "t", "air_temperature", "K", NULL, 4);
     add_flux_variable(file, H2OVMR, "h2o_vmr", "water_vapor_vmr", "ppmv", NULL, 4);
@@ -899,7 +901,7 @@ void create_flux_file(Output_t **output, char const * const filepath,
 #else
     nc_type type = NC_DOUBLE;
 #endif
-    int dimids[4] = {file->dimid[TIME], file->dimid[LAT], file->dimid[LON]};
+    int dimids[5] = {file->dimid[TIME], file->dimid[LAT], file->dimid[LON]};
     nc_catch(nc_def_var(file->ncid, "ts", type, 3, dimids, &(file->varid[TS])));
     char *standard_name = "surface_temperature";
     nc_catch(nc_put_att_text(file->ncid, file->varid[TS], "standard_name", strlen(standard_name),
@@ -915,6 +917,65 @@ void create_flux_file(Output_t **output, char const * const filepath,
                              standard_name));
     units = "K";
     nc_catch(nc_put_att_text(file->ncid, file->varid[TLAY], "units", strlen(units), units));
+/*
+    dimids[0] = file->dimid[TIME]; dimids[2] = file->dimid[LAYER];
+    dimids[2] = file->dimid[LAT]; dimids[3] = file->dimid[LON];
+    dimids[4] = file->dimid[LW_WAVENUMBER];
+    nc_catch(nc_def_var(file->ncid, "taucsaf", type, 5, dimids, &(file->varid[TAU])));
+    standard_name = "clear_sky_aerosol_free_optical_depth";
+    nc_catch(nc_put_att_text(file->ncid, file->varid[TAU], "standard_name", strlen(standard_name),
+                             standard_name));
+*/
+
+    dimids[0] = file->dimid[TIME]; dimids[1] = file->dimid[LAT]; dimids[2] = file->dimid[LON];
+    dimids[3] = file->dimid[LW_WAVENUMBER];
+    nc_catch(nc_def_var(file->ncid, "tau_z", type, 4, dimids, &(file->varid[TAUZ])));
+    standard_name = "clear_sky_aerosol_free_integrated_optical_depth";
+    nc_catch(nc_put_att_text(file->ncid, file->varid[TAUZ], "standard_name", strlen(standard_name),
+                             standard_name));
+
+    dimids[0] = file->dimid[TIME]; dimids[1] = file->dimid[LAT]; dimids[2] = file->dimid[LON];
+    dimids[3] = file->dimid[LW_WAVENUMBER];
+    nc_catch(nc_def_var(file->ncid, "rldsaf", type, 4, dimids, &(file->varid[RLDSAF])));
+    standard_name = "downwelling_surface_aerosol_free_longwave_flux_in_air";
+    nc_catch(nc_put_att_text(file->ncid, file->varid[RLDSAF], "standard_name",
+                             strlen(standard_name), standard_name));
+
+    dimids[0] = file->dimid[TIME]; dimids[1] = file->dimid[LAT]; dimids[2] = file->dimid[LON];
+    dimids[3] = file->dimid[LW_WAVENUMBER];
+    nc_catch(nc_def_var(file->ncid, "rlusaf", type, 4, dimids, &(file->varid[RLUSAF])));
+    standard_name = "upwelling_surface_aerosol_free_longwave_flux_in_air";
+    nc_catch(nc_put_att_text(file->ncid, file->varid[RLUSAF], "standard_name",
+                             strlen(standard_name), standard_name));
+
+    dimids[0] = file->dimid[TIME]; dimids[1] = file->dimid[LAT]; dimids[2] = file->dimid[LON];
+    dimids[3] = file->dimid[LW_WAVENUMBER];
+    nc_catch(nc_def_var(file->ncid, "rlutaf", type, 4, dimids, &(file->varid[RLUTAF])));
+    standard_name = "upwelling_toa_aerosol_free_longwave_flux_in_air";
+    nc_catch(nc_put_att_text(file->ncid, file->varid[RLUTAF], "standard_name",
+                             strlen(standard_name), standard_name));
+
+    dimids[0] = file->dimid[TIME]; dimids[1] = file->dimid[LAT]; dimids[2] = file->dimid[LON];
+    dimids[3] = file->dimid[LW_WAVENUMBER];
+    nc_catch(nc_def_var(file->ncid, "rldscsaf", type, 4, dimids, &(file->varid[RLDSCSAF])));
+    standard_name = "downwelling_surface_clear_sky_aerosol_free_longwave_flux_in_air";
+    nc_catch(nc_put_att_text(file->ncid, file->varid[RLDSCSAF], "standard_name",
+                             strlen(standard_name), standard_name));
+
+    dimids[0] = file->dimid[TIME]; dimids[1] = file->dimid[LAT]; dimids[2] = file->dimid[LON];
+    dimids[3] = file->dimid[LW_WAVENUMBER];
+    nc_catch(nc_def_var(file->ncid, "rluscsaf", type, 4, dimids, &(file->varid[RLUSCSAF])));
+    standard_name = "upwelling_surface_clear_sky_aerosol_free_longwave_flux_in_air";
+    nc_catch(nc_put_att_text(file->ncid, file->varid[RLUSCSAF], "standard_name",
+                             strlen(standard_name), standard_name));
+
+    dimids[0] = file->dimid[TIME]; dimids[1] = file->dimid[LAT]; dimids[2] = file->dimid[LON];
+    dimids[3] = file->dimid[LW_WAVENUMBER];
+    nc_catch(nc_def_var(file->ncid, "rlutcsaf", type, 4, dimids, &(file->varid[RLUTCSAF])));
+    standard_name = "upwelling_toa_clear_sky_aerosol_free_longwave_flux_in_air";
+    nc_catch(nc_put_att_text(file->ncid, file->varid[RLUTCSAF], "standard_name",
+                             strlen(standard_name), standard_name));
+
     *output = file;
     return;
 }
@@ -965,6 +1026,33 @@ void write_output(Output_t *output, VarId_t id, fp_t *data, int time, int column
         nc_catch(nc_inq_dimlen(output->ncid, output->dimid[LW_WAVENUMBER], &num_w));
         size_t start[5] = {time, 0, lat, lon, 0};
         size_t count[5] = {1, num_levels, 1, 1, num_w};
+#ifdef SINGLE_PRECISION
+        nc_catch(nc_put_vara_float(output->ncid, output->varid[id], start, count, data));
+#else
+        nc_catch(nc_put_vara_double(output->ncid, output->varid[id], start, count, data));
+#endif
+    }
+    else if (id == TAU)
+    {
+        size_t num_layers;
+        nc_catch(nc_inq_dimlen(output->ncid, output->dimid[LAYER], &num_layers));
+        size_t num_w;
+        nc_catch(nc_inq_dimlen(output->ncid, output->dimid[LW_WAVENUMBER], &num_w));
+        size_t start[5] = {time, 0, lat, lon, 0};
+        size_t count[5] = {1, num_layers, 1, 1, num_w};
+#ifdef SINGLE_PRECISION
+        nc_catch(nc_put_vara_float(output->ncid, output->varid[id], start, count, data));
+#else
+        nc_catch(nc_put_vara_double(output->ncid, output->varid[id], start, count, data));
+#endif
+    }
+    else if (id == TAUZ || id == RLDSAF || id == RLUSAF || id == RLUTAF ||
+             id == RLDSCSAF || id == RLUSCSAF || id == RLUTCSAF)
+    {
+        size_t num_w;
+        nc_catch(nc_inq_dimlen(output->ncid, output->dimid[LW_WAVENUMBER], &num_w));
+        size_t start[4] = {time, lat, lon, 0};
+        size_t count[4] = {1, 1, 1, num_w};
 #ifdef SINGLE_PRECISION
         nc_catch(nc_put_vara_float(output->ncid, output->varid[id], start, count, data));
 #else

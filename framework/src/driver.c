@@ -270,9 +270,32 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
             catch(calculate_lw_fluxes(&longwave, &optics_lw_total, surface_temperature,
                                       layer_temperature, level_temperature,
                                       surface_emissivity, lw_flux_up, lw_flux_down));
+/*
+            write_output(output, TAU, optics_lw_total.tau, t, i);
+*/
+            fp_t tauz[lw_grid.n];
+            for (n=0; n<lw_grid.n; ++n)
+            {
+                tauz[n] = 0.;
+            }
+            for (n=0; n<atm.num_layers; ++n)
+            {
+                int j;
+                for (j=0; j<lw_grid.n; ++j)
+                {
+                    tauz[j] += optics_lw_total.tau[n*lw_grid.n + j];
+                }
+            }
+            write_output(output, TAUZ, tauz, t, i);
             catch(destroy_optics(&optics_lw_total));
+/*
             write_output(output, RLUCSAF, lw_flux_up, t, i);
             write_output(output, RLDCSAF, lw_flux_down, t, i);
+*/
+            n = lw_grid.n*(atm.num_levels - 1);
+            write_output(output, RLUTCSAF, lw_flux_up, t, i);
+            write_output(output, RLUSCSAF, &(lw_flux_up[n]), t, i);
+            write_output(output, RLDSCSAF, &(lw_flux_up[n]), t, i);
 
             if (!atm.clean)
             {
@@ -286,8 +309,10 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
                                           layer_temperature, level_temperature,
                                           surface_emissivity, lw_flux_up, lw_flux_down));
                 catch(destroy_optics(&optics_lw_total));
+/*
                 write_output(output, RLUCS, lw_flux_up, t, i);
                 write_output(output, RLDCS, lw_flux_down, t, i);
+*/
             }
 
             if (!atm.clear)
@@ -331,7 +356,7 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
                     lw_flux_up_sum[j] = 0.;
                     lw_flux_down_sum[j] = 0.;
                 }
-                int const num_subcolumns = 50;
+                int const num_subcolumns = 5;
                 fp_t const * cloud_fraction = &(atm.cloud_fraction[(offset + i)*atm.num_layers]);
                 fp_t const * liquid_content = &(atm.liquid_water_content[(offset + i)*atm.num_layers]);
                 fp_t const * ice_content = &(atm.ice_water_content[(offset + i)*atm.num_layers]);
@@ -379,8 +404,14 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
                     lw_flux_up_sum[j] /= (double)num_subcolumns;
                     lw_flux_down_sum[j] /= (double)num_subcolumns;
                 }
+/*
                 write_output(output, RLUAF, lw_flux_up_sum, t, i);
                 write_output(output, RLDAF, lw_flux_down_sum, t, i);
+*/
+                n = lw_grid.n*(atm.num_levels - 1);
+                write_output(output, RLUTAF, lw_flux_up, t, i);
+                write_output(output, RLUSAF, &lw_flux_up[n], t, i);
+                write_output(output, RLDSAF, &lw_flux_up[n], t, i);
             }
             write_output(output, PLEV, &(atm.level_pressure[(offset + i)*atm.num_levels]), t, i);
             write_output(output, TLEV, &(atm.level_temperature[(offset + i)*atm.num_levels]), t, i);
@@ -422,8 +453,10 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
                     integrate(&(sw_flux_up[j*grid.n]), grid.n, grid.dw, &(flux_up_total[j]));
                     integrate(&(sw_flux_down[j*grid.n]), grid.n, grid.dw, &(flux_down_total[j]));
                 }
+/*
                 write_output(output, RSU, flux_up_total, t, i);
                 write_output(output, RSD, flux_down_total, t, i);
+*/
             }
 #endif
         }
