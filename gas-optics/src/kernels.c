@@ -410,7 +410,9 @@ int calc_optical_depth_line_sweep(uint64_t const num_lines, int const num_layers
 int calc_optical_depth_line_sample(uint64_t const num_lines, int const num_layers,
                                    fp_t * const vnn, fp_t * const snn, fp_t * const gamma,
                                    fp_t * const alpha, fp_t const * const n,
-                                   SpectralBins_t const bins, fp_t * const tau)
+                                   SpectralBins_t const bins, fp_t * const tau,
+                                   fp_t const * pedestal_lower_bound,
+                                   fp_t const * pedestal_upper_bound)
 {
     uint64_t const fsteps = ceil(25.f/bins.wres);
     int i;
@@ -426,8 +428,8 @@ int calc_optical_depth_line_sample(uint64_t const num_lines, int const num_layer
             in.lorentz_hwhm = gamma[loffset];
             in.doppler_hwhm = alpha[loffset];
             in.wres = bins.wres;
-            uint64_t fcenterid = floor((2*((in.line_center-bins.w0)/
-                                       bins.wres)+1)/2);
+            uint64_t fcenterid = floor((2*((in.line_center - bins.w0)/
+                                       bins.wres) + 1)/2);
             if (fcenterid < bins.num_wpoints)
             {
                 uint64_t s = (int64_t)(fcenterid - fsteps) < 0 ? 0 : fcenterid - fsteps;
@@ -437,6 +439,19 @@ int calc_optical_depth_line_sample(uint64_t const num_lines, int const num_layer
                 in.num_wpoints = e - s + 1;
                 fp_t t[in.num_wpoints];
                 rfm_voigt_line_shape(in, t);
+                if (pedestal_lower_bound != NULL && pedestal_upper_bound != NULL)
+                {
+                    if (*pedestal_lower_bound <= in.line_center &&
+                        *pedestal_upper_bound >= in.line_center)
+                    {
+                        /*Subtract pedestal.*/
+                        uint64_t f;
+                        for (f=0; f<in.num_wpoints; ++f)
+                        {
+                            t[f] -= t[in.num_wpoints - 1];
+                        }
+                    }
+                }
                 uint64_t f;
                 for (f=s; f<=e; ++f)
                 {
