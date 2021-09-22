@@ -417,7 +417,8 @@ int calc_optical_depth_line_sample(uint64_t const num_lines, int const num_layer
     uint64_t const fsteps = ceil(25.f/bins.wres);
     int i;
     uint64_t j;
-#pragma omp parallel for collapse(2) default(none) private(i,j)
+#pragma omp parallel for collapse(2) default(none) private(i,j) \
+                         shared(pedestal_lower_bound, pedestal_upper_bound)
     for (i=0; i<num_layers; ++i)
     {
         for (j=0; j<num_lines; ++j)
