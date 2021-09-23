@@ -49,9 +49,9 @@ static void check_name(char const * const name, /*Argument name.*/
 
 
 /*Get the basename of a path.*/
-static char * basename(char *path, /*File path.*/
-                       char seperator /*Path seperator.*/
-                      )
+static char * path_basename(char *path, /*File path.*/
+                            char seperator /*Path seperator.*/
+                           )
 {
     size_t index = 0;
     size_t i;
@@ -70,7 +70,7 @@ static char * basename(char *path, /*File path.*/
 static void print_usage(Parser_t const p /*Parser.*/
                        )
 {
-    printf("\033[3mUsage: %s ", basename(p.argv[0], '/'));
+    printf("\033[3mUsage: %s ", path_basename(p.argv[0], '/'));
     Argument_t *a = p.args;
     while (a != NULL)
     {
@@ -98,7 +98,7 @@ static void print_help(Parser_t const p /*Parser.*/
                       )
 {
     print_usage(p);
-    printf("\033[3m\n%s - %s\n", basename(p.argv[0], '/'), p.description);
+    printf("\033[3m\n%s - %s\n", path_basename(p.argv[0], '/'), p.description);
     Argument_t *a = p.args;
     if (p.num_pos_args > 0)
     {
