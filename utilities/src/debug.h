@@ -185,7 +185,9 @@
 
 #if defined(FE_DIVBYZERO) && defined(FE_INEXACT) && defined(FE_INVALID) \
     && defined(FE_OVERFLOW) && defined(FE_UNDERFLOW)
+/*
 #pragma STDC FENV_ACCESS ON
+*/
 
 
 #define clear_floating_point_exceptions() { \
