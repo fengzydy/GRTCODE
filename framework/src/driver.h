@@ -5,14 +5,28 @@
 #include "grtcode_utilities.h"
 
 
+#define LONGWAVE 1
+#define SHORTWAVE 2
+#define UPWARD 3
+#define DOWNWARD 4
+#define CLEARSKY 7
+#define CLOUDYSKY 8
+#define AEROSOL 15
+#define AEROSOLFREE 16
+#define TOP 31
+#define SURFACE 32
+
+
 typedef enum VarId
 {
-    RLDAF = 0,
+    RLDAF = 128,
     RLDCS,
     RLDCSAF,
     RLUAF,
     RLUCS,
     RLUCSAF,
+    RLU,
+    RLD,
     RSU,
     RSD,
     H2OVMR,
@@ -31,6 +45,9 @@ typedef enum VarId
     RLDSCSAF,
     RLUSCSAF,
     RLUTCSAF,
+    RSDSCSAF,
+    RSUSCSAF,
+    RSUTCSAF,
     TAUZ,
     NUM_VARS
 } VarId_t;
@@ -110,10 +127,10 @@ void create_flux_file(Output_t **output, char const * const path, Atmosphere_t c
 Atmosphere_t create_atmosphere(Parser_t * const parser);
 
 
-void destroy_atmosphere(Atmosphere_t *atm);
+void destroy_atmosphere(Atmosphere_t * atm);
 
 
-void write_output(Output_t *output, VarId_t id, fp_t *data, int time, int column);
+void write_output(Output_t *output, unsigned int id, fp_t const * data, int time, int column);
 
 
 #endif

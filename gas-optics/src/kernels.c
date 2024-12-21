@@ -36,7 +36,7 @@ int calc_line_centers(uint64_t const num_lines, int const num_layers, fp_t const
 {
     int i;
     uint64_t j;
-#pragma omp parallel for collapse(2) default(none) private(i,j)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
     for (i=0; i<num_layers; ++i)
     {
         for (j=0; j<num_lines; ++j)
@@ -54,7 +54,7 @@ int calc_partition_functions(int const num_layers, int const mol_id, int const n
 {
     int i;
     int j;
-#pragma omp parallel for collapse(2) default(none) private(i,j)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
     for (i=0; i<num_layers; ++i)
     {
         for (j=0; j<num_iso; ++j)
@@ -75,7 +75,7 @@ int calc_line_strengths(uint64_t const num_lines, int const num_layers, int cons
     fp_t const c2 = -1.4387686f;
     int i;
     uint64_t j;
-#pragma omp parallel for collapse(2) default(none) private(i,j)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
     for (i=0; i<num_layers; ++i)
     {
         for (j=0; j<num_lines; ++j)
@@ -97,7 +97,7 @@ int calc_lorentz_hw(uint64_t const num_lines, int const num_layers, fp_t const *
     fp_t const tref = 296.f; /*[K]*/
     int i;
     uint64_t j;
-#pragma omp parallel for collapse(2) default(none) private(i,j)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
     for (i=0; i<num_layers; ++i)
     {
         for (j=0; j<num_lines; ++j)
@@ -119,7 +119,7 @@ int calc_doppler_hw(uint64_t const num_lines, int const num_layers, fp_t const m
     fp_t const c = 2.99792458E10; /*[cm s-1]*/
     int i;
     uint64_t j;
-#pragma omp parallel for collapse(2) default(none) private(i,j)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
     for (i=0; i<num_layers; ++i)
     {
         for (j=0; j<num_lines; ++j)
@@ -136,7 +136,7 @@ int sort_lines(uint64_t const num_lines, int const num_layers, fp_t * const vnn,
                fp_t * const snn, fp_t * const gamma, fp_t * const alpha)
 {
     int k;
-#pragma omp parallel for default(none) private(k)
+#pragma omp parallel for default(shared) private(k)
     for (k=0; k<num_layers; ++k)
     {
         fp_t *v = &(vnn[k*num_lines]);
@@ -181,7 +181,7 @@ int calc_optical_depth_bin_sweep(uint64_t const num_lines, int const num_layers,
 {
     int i;
     uint64_t j;
-#pragma omp parallel for collapse(2) default(none) shared(bins) private(i,j)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
     for (i=0; i<num_layers; ++i)
     {
         for (j=0; j<bins.n; ++j)
@@ -313,7 +313,7 @@ int calc_optical_depth_line_sweep(uint64_t const num_lines, int const num_layers
     fp_t const bin_width = bins.wres*bins.ppb;
     int i;
     uint64_t j;
-#pragma omp parallel for collapse(2) default(none) shared(bins) private(i,j)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
     for (i=0; i<num_layers; ++i)
     {
         for (j=0; j<num_lines; ++j)
@@ -417,8 +417,7 @@ int calc_optical_depth_line_sample(uint64_t const num_lines, int const num_layer
     uint64_t const fsteps = ceil(25.f/bins.wres);
     int i;
     uint64_t j;
-#pragma omp parallel for collapse(2) default(none) private(i,j) \
-                         shared(pedestal_lower_bound, pedestal_upper_bound)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
     for (i=0; i<num_layers; ++i)
     {
         for (j=0; j<num_lines; ++j)
@@ -477,7 +476,7 @@ int calc_water_vapor_ctm_optical_depth(uint64_t const num_wpoints, int const num
     fp_t const tref = 296.f;
     int i;
     uint64_t j;
-#pragma omp parallel for collapse(2) default(none) private(i,j)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
     for (i=0; i<num_layers; ++i)
     {
         for (j=0; j<num_wpoints; ++j)
@@ -499,7 +498,7 @@ int calc_ozone_ctm_optical_depth(uint64_t const num_wpoints, int const num_layer
 {
     int i;
     uint64_t j;
-#pragma omp parallel for collapse(2) default(none) private(i,j)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
     for (i=0; i<num_layers; ++i)
     {
         for (j=0; j<num_wpoints; ++j)
@@ -519,7 +518,7 @@ int interpolate(SpectralBins_t const bins, fp_t * const tau)
     {
         int i;
         uint64_t j;
-#pragma omp parallel for collapse(2) default(none) private(i,j)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
         for (i=0; i<bins.num_layers; ++i)
         {
             for (j=0; j<bins.n-1; ++j)
@@ -535,7 +534,7 @@ int interpolate(SpectralBins_t const bins, fp_t * const tau)
     {
         int i;
         uint64_t j;
-#pragma omp parallel for collapse(2) default(none) private(i,j)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
         for (i=0; i<bins.num_layers; ++i)
         {
             for (j=0; j<bins.n-1; ++j)
@@ -558,7 +557,7 @@ int interpolate_last_bin(SpectralBins_t const bins, fp_t * const tau)
     if (bins.do_last_interp)
     {
         int i;
-#pragma omp parallel for default(none) private(i)
+#pragma omp parallel for default(shared) private(i)
         for (i=0; i<bins.num_layers; ++i)
         {
             fp_t *t = &(tau[i*bins.num_wpoints]);
@@ -570,7 +569,7 @@ int interpolate_last_bin(SpectralBins_t const bins, fp_t * const tau)
     else
     {
         int i;
-#pragma omp parallel for default(none) private(i)
+#pragma omp parallel for default(shared) private(i)
         for (i=0; i<bins.num_layers; ++i)
         {
             fp_t *t = &(tau[i*bins.num_wpoints]);
@@ -590,7 +589,7 @@ int calc_cfc_optical_depth(uint64_t const num_wpoints, int const num_layers,
     fp_t const half = 0.5;
     int i;
     uint64_t j;
-#pragma omp parallel for collapse(2) default(none) private(i,j)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
     for (i=0; i<num_layers; ++i)
     {
         for (j=0; j<num_wpoints; ++j)
@@ -616,7 +615,7 @@ int calc_cia_optical_depth(uint64_t const num_wpoints, int const num_layers,
     fp_t const c = (atmtobarye*atmtobarye)/(k*m*g*2.); /*[K atm-2 cm-5].*/
     int i;
     uint64_t j;
-#pragma omp parallel for collapse(2) default(none) private(i,j)
+#pragma omp parallel for collapse(2) default(shared) private(i, j)
     for (i=0; i<num_layers; ++i)
     {
         for (j=0; j<num_wpoints; ++j)

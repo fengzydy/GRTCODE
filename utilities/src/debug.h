@@ -75,8 +75,8 @@
     reset_error_buffer(); \
     char s__[1024]; \
     snprintf(s__, 1024, mesg , __VA_ARGS__); \
-    char s___[1024]; \
-    snprintf(s___, 1024, "Error: %s\nBacktrace:", s__); \
+    char s___[2048]; \
+    snprintf(s___, 2048, "Error: %s\nBacktrace:", s__); \
     append_to_error_buffer(s___); \
     backtrace(); \
     return err; \
