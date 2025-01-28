@@ -3,7 +3,7 @@
 
 
 #include <stdlib.h>
-
+#include "device.h"
 #include "floating_point_type.h"
 
 
@@ -16,13 +16,25 @@
 }
 
 
+static Device_t device = HOST_ONLY;
+
+
 /*Check values in an array.*/
 int check_array(
     fp_t const * const actual, /*Array of actual values.*/
     fp_t const * const expected, /*Array of expected values.*/
     size_t const size, /*Size of the input arrays.*/
-    fp_t const tolerance, /*Tolerance.*/
-    int const absolute /*Use absolute differences or percent differences?*/
+    fp_t const relative_tolerance, /*Relative Tolerance.*/
+    fp_t const absolute_tolerance /*Use absolute differences or percent differences?*/
+);
+
+
+/*Compare two floating point values.*/
+int check_floating_point(
+    fp_t const actual, /*Actual value.*/
+    fp_t const expected, /*Expected value.*/
+    fp_t const relative_tolerance, /*Relative Tolerance.*/
+    fp_t const absolute_tolerance /*Use absolute differences or percent differences?*/
 );
 
 

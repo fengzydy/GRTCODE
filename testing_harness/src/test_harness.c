@@ -8,27 +8,45 @@
 
 /*Check values in an array.*/
 int check_array(fp_t const * const actual, fp_t const * const expected, size_t const size,
-                fp_t const tolerance, int const absolute)
+                fp_t const relative_tolerance, fp_t const absolute_tolerance)
 {
     int failures = 0;
     size_t i;
     for (i=0; i<size; ++i)
     {
-        fp_t error;
-        if (absolute)
+        if (!check_floating_point(actual[i], expected[i], relative_tolerance, absolute_tolerance))
         {
-            error = actual[i] - expected[i];
-        }
-        else
-        {
-            error = 100.*(actual[i] - expected[i])/expected[i];
-        }
-        if (fabs(error) > tolerance)
-        {
+            fprintf(stderr, "\tLarger than expect difference found at index [%d]\n", (int)i);
             failures++;
         }
     }
     return failures;
+}
+
+
+/*Return the maximum of two floating point values.*/
+fp_t maximum(fp_t a, fp_t b)
+{
+    return a > b ? a : b;
+}
+
+
+/*Check if two floating point numbers are approximately equal.*/
+int check_floating_point(fp_t const actual, fp_t const expected,
+                         fp_t const relative_tolerance, fp_t const absolute_tolerance)
+{
+    fp_t value = maximum(fabs(actual), fabs(expected));
+    fp_t tolerance = maximum(relative_tolerance*value, absolute_tolerance);
+    if (fabs(actual - expected) <= tolerance)
+    {
+        return 1;
+    }
+    else
+    {
+        fprintf(stderr, "Error: actual: %e,  expected: %e,  difference: %e \n",
+                actual, expected, actual - expected);
+        return 0;
+    }
 }
 
 

@@ -1,6 +1,6 @@
 CC = gcc
 CPPFLAGS = -Iutilities/src -Igas-optics/src -Ishortwave/src -Ilongwave/src -Iclouds -Iframework/src -Itesting_harness/src
-CFLAGS = -Wall -Wextra -pedantic -fopenmp
+CFLAGS = -g -O0 -Wall -Wextra -pedantic -fopenmp
 
 OBJECTS = build/longwave.o \
           build/disort_shortwave.o \
@@ -98,6 +98,12 @@ TESTS = build/test_curtis_godson \
 all: build/libgrtcode.a
 
 check: $(TESTS)
+	-build/test_curtis_godson
+	-build/test_device
+
+
+
+
 
 circ: build/circ
 

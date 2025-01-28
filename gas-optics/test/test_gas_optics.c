@@ -12,40 +12,51 @@
 
 
 #define NUM_TESTS 10
+#define num_levels 7
 
 
-int test_create_gas_optics()
+int setup(GasOptics_t * gas_optics)
 {
-    GasOptics_t gas_optics;
-    int num_levels = 7;
-    SpectralGrid_t grid;
     Device_t device;
+    rc_check(create_device(&device, NULL));
+    SpectralGrid_t grid;
+    rc_check(create_spectral_grid(&grid, 1., 3000., 1.));
     char * hitran_path = "";
-    char * h2o_ctm_dir = "";
-    char * o3_ctm_file = "";
+    char * h2o_ctm_dir = "none";
+    char * o3_ctm_file = "none";
     double wcutoff = 25.;
     int optical_depth_method = line_sample;
-    rc_check(create_gas_optics(&gas_optics, num_levels, &grid, &device, hitran_path,
+    rc_check(create_gas_optics(gas_optics, num_levels, &grid, &device, hitran_path,
                                h2o_ctm_dir, o3_ctm_file, &wcutoff, &optical_depth_method));
     return GRTCODE_SUCCESS;
 }
 
 
-int test_destroy_gas_optics()
+int teardown(GasOptics_t * gas_optics)
 {
-    GasOptics_t gas_optics;
-    rc_check(destroy_gas_optics(&gas_optics));
+    rc_check(destroy_gas_optics(gas_optics));
     return GRTCODE_SUCCESS;
 }
 
 
+/*Create and destroy a GasOptics_t object.*/
+int test_simple()
+{
+    GasOptics_t gas_optics;
+    rc_check(setup(&gas_optics));
+    rc_check(teardown(&gas_optics));
+    return GRTCODE_SUCCESS;
+}
+
+
+/*Add a molecule.*/
 int test_add_molecule()
 {
     GasOptics_t gas_optics;
+    rc_check(setup(&gas_optics));
     int molecule_id = H2O;
-    double min_line_center = 1.;
-    double max_line_center = 1000.;
-    rc_check(add_molecule(&gas_optics, molecule_id, &min_line_center, &max_line_center));
+    rc_check(add_molecule(&gas_optics, molecule_id, NULL, NULL));
+    rc_check(teardown(&gas_optics));
     return GRTCODE_SUCCESS;
 }
 
@@ -125,13 +136,8 @@ int main(void)
 {
     Test_t tests[NUM_TESTS] = {
         {
-            test_create_gas_optics,
-            "test_create_gas_optics",
-            GRTCODE_SUCCESS
-        },
-        {
-            test_destroy_gas_optics,
-            "test_destroy_gas_optics",
+            test_simple,
+            "test_simple",
             GRTCODE_SUCCESS
         },
         {

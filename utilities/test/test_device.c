@@ -3,9 +3,10 @@
 #include "test_harness.h"
 
 
-#define NUM_TESTS 2
+#define NUM_TESTS 3
 
 
+/*If building with a host compiler, make sure no GPU devices are found.*/
 int test_get_num_gpus()
 {
     int num_devices;
@@ -18,11 +19,25 @@ int test_get_num_gpus()
 }
 
 
+/*Create a standard device object.*/
 int test_create_device()
 {
     Device_t device;
     rc_check(create_device(&device, NULL));
     if (device != HOST_ONLY)
+    {
+        return GRTCODE_VALUE_ERR;
+    }
+    return GRTCODE_SUCCESS;
+}
+
+
+/*Try passing in a bad device number.*/
+int test_create_invalid_device()
+{
+    Device_t device;
+    int one = 1;
+    if (create_device(&device, &one) != GRTCODE_RANGE_ERR)
     {
         return GRTCODE_VALUE_ERR;
     }
@@ -41,6 +56,11 @@ int main(void)
         {
             test_create_device,
             "test_create_device",
+            GRTCODE_SUCCESS
+        },
+        {
+            test_create_invalid_device,
+            "test_create_invalid_device",
             GRTCODE_SUCCESS
         }
     };
