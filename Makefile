@@ -99,9 +99,9 @@ all: build/libgrtcode.a
 
 check: $(TESTS)
 	-build/test_curtis_godson
-	-build/test_device
-
-
+	build/test_device
+	build/test_spectral_grid
+	build/test_parse_csv
 
 
 
