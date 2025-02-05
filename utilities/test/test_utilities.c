@@ -42,8 +42,8 @@ int test_angstrom_exponent()
 
 int test_angstrom_exponent_sample()
 {
-    fp_t x[32];
-    fp_t y[32];
+    fp_t x[2] = {5., 25.};
+    fp_t y[2] = {0.4567, 2.9801};
     fp_t newx[32];
     fp_t newy[32];
     size_t n = 32;
