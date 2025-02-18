@@ -47,15 +47,18 @@
 enum dimid
 {
     LEVEL = 0,
+    COLUMN,
     NUM_DIMS
 };
 
 
 struct Output
 {
-    int *dimid;
+    int dimid[32];
     int ncid;
-    int *varid;
+    int varid[256];
+    SpectralGrid_t const * lw_grid;
+    SpectralGrid_t const * sw_grid;
 };
 
 
@@ -132,8 +135,10 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     {
         int dimid;
         nc_catch(nc_inq_dimid(ncid, "site", &dimid));
+        char name[128];
+        memset(name, 0, 128*sizeof(char));
         size_t num_columns;
-        nc_catch(nc_inq_dimlen(ncid, dimid, &num_columns));
+        nc_catch(nc_inq_dim(ncid, dimid, name, &num_columns));
         X = (int)num_columns - 1;
     }
     atm.num_columns = X - x + 1;
@@ -149,8 +154,10 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     {
         int dimid;
         nc_catch(nc_inq_dimid(ncid, "level", &dimid));
+        char name[128];
+        memset(name, 0, 128*sizeof(char));
         size_t num_levels;
-        nc_catch(nc_inq_dimlen(ncid, dimid, &num_levels));
+        nc_catch(nc_inq_dim(ncid, dimid, name, &num_levels));
         Z = (int)num_levels - 1;
     }
     atm.num_levels = Z - z + 1;
@@ -214,10 +221,6 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     start[0] = x; start[1] = 0; start[2] = 0;
     count[0] = atm.num_columns; count[1] = 1; count[2] = 1;
     get_var(ncid, varid, start, count, atm.total_solar_irradiance);
-    for (i=0; i<atm.num_columns; ++i)
-    {
-        atm.total_solar_irradiance[i] /= atm.solar_zenith_angle[i];
-    }
 
     /*Surface albedo.*/
     atm.albedo_grid_size = 2;
@@ -267,10 +270,15 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         int global_mean;
     };
     int const num_molecules = 7;
-    struct MoleculeMeta molecules[num_molecules] = {{CH4, "-CH4", "methane_GM", 1},
-        {CO, "-CO", "carbon_monoxide_GM", 1}, {CO2, "-CO2", "carbon_dioxide_GM", 1},
-        {H2O, "-H2O", "water_vapor", 0}, {N2O, "-N2O", "nitrous_oxide_GM", 1},
-        {O2, "-O2", "oxygen_GM", 1}, {O3, "-O3", "ozone", 0}};
+    struct MoleculeMeta molecules[32] = {
+        {CH4, "-CH4", "methane_GM", 1},
+        {CO, "-CO", "carbon_monoxide_GM", 1},
+        {CO2, "-CO2", "carbon_dioxide_GM", 1},
+        {H2O, "-H2O", "water_vapor", 0},
+        {N2O, "-N2O", "nitrous_oxide_GM", 1},
+        {O2, "-O2", "oxygen_GM", 1},
+        {O3, "-O3", "ozone", 0}
+    };
     alloc(atm.molecules, num_molecules, int *);
     atm.num_molecules = 0;
     alloc(atm.ppmv, num_molecules, fp_t **);
@@ -298,24 +306,25 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
                     int k;
                     for (k=1; k<atm.num_layers; ++k)
                     {
-                        ppmv[j*atm.num_levels+k] = to_ppmv*(abundance[o+k] + (abundance[o+k+1] - abundance[o+k])*
-                                                   (atm.level_pressure[j*atm.num_levels+k] - atm.layer_pressure[o+k])/
-                                                   (atm.layer_pressure[o+k+1] - atm.layer_pressure[o+k]));
+                        ppmv[j*atm.num_levels+k] = to_ppmv*(abundance[o+k-1] + (abundance[o+k] - abundance[o+k-1])*
+                                                   (atm.level_pressure[j*atm.num_levels+k] - atm.layer_pressure[o+k-1])/
+                                                   (atm.layer_pressure[o+k] - atm.layer_pressure[o+k-1]));
                     }
                 }
             }
             else
             {
-                fp_t gm;
+                fp_t gm = 0.;
                 nc_catch(nc_inq_varid(ncid, molecules[i].name, &varid));
                 start[0] = experiment; start[1] = 0; start[2] = 0;
                 count[0] = 1; count[1] = 1; count[2] = 1;
                 get_var(ncid, varid, start, count, &gm);
                 char units[32];
+                memset(units, 0, 32*sizeof(char));
                 nc_catch(nc_get_att_text(ncid, varid, "units", units));
                 gm *= atof(units)*to_ppmv;
                 int j;
-                for (j=0; j<atm.num_columns*atm.num_layers; ++j)
+                for (j=0; j<atm.num_columns*atm.num_levels; ++j)
                 {
                     ppmv[j] = gm;
                 }
@@ -337,30 +346,32 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
 
     /*CFC abundances.*/
     int const num_cfcs = 24;
-    struct MoleculeMeta cfcs[num_cfcs] = {{CCl4, "-CCl4", "carbon_tetrachloride_GM", 1},
-                                          {C2F6, "-C2F6", "c2f6_GM", 1},
-                                          {CF4, "-CF4", "cf4_GM", 1},
-                                          {CFC11, "-CFC-11", "cfc11_GM", 1},
-                                          {CFC11, "-CFC-11-eq", "cfc11eq_GM", 1},
-                                          {CFC12, "-CFC-12", "cfc12_GM", 1},
-                                          {CFC12, "-CFC-12-eq", "cfc12eq_GM", 1},
-                                          {CFC113, "-CFC-113", "cfc113_GM", 1},
-                                          {CFC114, "-CFC-114", "cfc114_GM", 1},
-                                          {CFC115, "-CFC-115", "cfc115_GM", 1},
-                                          {CH2Cl2, "-CH2Cl2", "ch2cl2_GM", 1},
-                                          {HCFC22, "-HCFC-22", "hcfc22_GM", 1},
-                                          {HCFC141b, "-HCFC-141b", "hcfc141b_GM", 1},
-                                          {HCFC142b, "-HCFC-142b", "hcfc142b_GM", 1},
-                                          {HFC23, "-HFC-23", "hfc23_GM", 1},
-                                          {HFC125, "-HFC-125", "hfc125_GM", 1},
-                                          {HFC134a, "-HFC-134a", "hfc134a_GM", 1},
-                                          {HFC134a, "-HFC-134a-eq", "hfc134aeq_GM", 1},
-                                          {HFC143a, "-HFC-143a", "hfc143a_GM", 1},
-                                          {HFC152a, "-HFC-152a", "hfc152a_GM", 1},
-                                          {HFC227ea, "-HFC-227ea", "hfc227ea_GM", 1},
-                                          {HFC245fa, "-HFC-245fa", "hfc245fa_GM", 1},
-                                          {NF3, "-NF3", "nf3_GM", 1},
-                                          {SF6, "-SF6", "sf6_GM", 1}};
+    struct MoleculeMeta cfcs[32] = {
+        {CCl4, "-CCl4", "carbon_tetrachloride_GM", 1},
+        {C2F6, "-C2F6", "c2f6_GM", 1},
+        {CF4, "-CF4", "cf4_GM", 1},
+        {CFC11, "-CFC-11", "cfc11_GM", 1},
+        {CFC11, "-CFC-11-eq", "cfc11eq_GM", 1},
+        {CFC12, "-CFC-12", "cfc12_GM", 1},
+        {CFC12, "-CFC-12-eq", "cfc12eq_GM", 1},
+        {CFC113, "-CFC-113", "cfc113_GM", 1},
+        {CFC114, "-CFC-114", "cfc114_GM", 1},
+        {CFC115, "-CFC-115", "cfc115_GM", 1},
+        {CH2Cl2, "-CH2Cl2", "ch2cl2_GM", 1},
+        {HCFC22, "-HCFC-22", "hcfc22_GM", 1},
+        {HCFC141b, "-HCFC-141b", "hcfc141b_GM", 1},
+        {HCFC142b, "-HCFC-142b", "hcfc142b_GM", 1},
+        {HFC23, "-HFC-23", "hfc23_GM", 1},
+        {HFC125, "-HFC-125", "hfc125_GM", 1},
+        {HFC134a, "-HFC-134a", "hfc134a_GM", 1},
+        {HFC134a, "-HFC-134a-eq", "hfc134aeq_GM", 1},
+        {HFC143a, "-HFC-143a", "hfc143a_GM", 1},
+        {HFC152a, "-HFC-152a", "hfc152a_GM", 1},
+        {HFC227ea, "-HFC-227ea", "hfc227ea_GM", 1},
+        {HFC245fa, "-HFC-245fa", "hfc245fa_GM", 1},
+        {NF3, "-NF3", "nf3_GM", 1},
+        {SF6, "-SF6", "sf6_GM", 1}
+    };
     alloc(atm.cfc, num_cfcs, Cfc_t *);
     atm.num_cfcs = 0;
     alloc(atm.cfc_ppmv, num_cfcs, fp_t **);
@@ -377,6 +388,7 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
             count[0] = 1; count[1] = 1; count[2] = 1;
             get_var(ncid, varid, start, count, &gm);
             char units[32];
+            memset(units, 0, 32*sizeof(char));
             nc_catch(nc_get_att_text(ncid, varid, "units", units));
             gm *= atof(units)*to_ppmv;
             int j;
@@ -397,8 +409,11 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         int species2;
         char *flag;
     };
-    struct CiaMeta cias[num_cias] = {{CIA_N2, CIA_N2, "-N2-N2"},
-        {CIA_O2, CIA_N2, "-O2-N2"}, {CIA_O2, CIA_O2, "-O2-O2"}};
+    struct CiaMeta cias[8] = {
+        {CIA_N2, CIA_N2, "-N2-N2"},
+        {CIA_O2, CIA_N2, "-O2-N2"},
+        {CIA_O2, CIA_O2, "-O2-O2"}
+    };
     alloc(atm.cia, num_cias, Cia_t *);
     atm.num_cias = 0;
     alloc(atm.cia_species, num_cia_species, int *);
@@ -441,6 +456,7 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
                     count[0] = 1; count[1] = 1; count[2] = 1;
                     get_var(ncid, varid, start, count, &gm);
                     char units[32];
+                    memset(units, 0, 32*sizeof(char));
                     nc_catch(nc_get_att_text(ncid, varid, "units", units));
                     gm *= atof(units)*to_ppmv;
                     int j;
@@ -531,7 +547,7 @@ static void add_flux_variable(Output_t * const o, /*Output object.*/
     nc_type type = NC_DOUBLE;
 #endif
     int varid;
-    nc_catch(nc_def_var(o->ncid, name, type, NUM_DIMS, o->dimid, &varid));
+    nc_catch(nc_def_var(o->ncid, name, type, 1, &(o->dimid[COLUMN]), &varid));
     char *unit = "W m-2";
     nc_catch(nc_put_att_text(o->ncid, varid, "units", strlen(unit), unit));
     nc_catch(nc_put_att_text(o->ncid, varid, "standard_name", strlen(standard_name),
@@ -554,16 +570,27 @@ void create_flux_file(Output_t **output, char const * const filepath,
                       Atmosphere_t const * const atm, SpectralGrid_t const * const lw_grid,
                       SpectralGrid_t const * const sw_grid)
 {
-    Output_t *file = (Output_t *)malloc(sizeof(*file));
-    file->dimid = (int *)malloc(sizeof(*(file->dimid))*NUM_DIMS);
-    file->varid = (int *)malloc(sizeof(*(file->varid))*NUM_VARS);
+    Output_t * file = (Output_t *)malloc(sizeof(*file));
     nc_catch(nc_create(filepath, NC_NETCDF4, &(file->ncid)));
     nc_catch(nc_def_dim(file->ncid, "level", atm->num_levels, &(file->dimid[LEVEL])));
-    add_flux_variable(file, RLUCSAF, "rlu", "upwelling_longwave_flux_in_air", NULL);
-    add_flux_variable(file, RLDCSAF, "rld", "downwelling_longwave_flux_in_air", NULL);
+    nc_catch(nc_def_dim(file->ncid, "column", atm->num_columns, &(file->dimid[COLUMN])));
+    int id = LONGWAVE ^ UPWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE;
+    add_flux_variable(file, id, "rlutcsaf", "upwelling_toa_longwave_flux_in_air", NULL);
+    id = LONGWAVE ^ UPWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE;
+    add_flux_variable(file, id, "rluscsaf", "upwelling_surface_longwave_flux_in_air", NULL);
+    id = LONGWAVE ^ DOWNWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE;
+    add_flux_variable(file, id, "rldscsaf", "downwelling_surface_longwave_flux_in_air", NULL);
     fp_t const zero = 0;
-    add_flux_variable(file, RSU, "rsu", "upwelling_shortwave_flux_in_air", &zero);
-    add_flux_variable(file, RSD, "rsd", "downwelling_shortwave_flux_in_air", &zero);
+    id = SHORTWAVE ^ UPWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE;
+    add_flux_variable(file, id, "rsutcsaf", "upwelling_toa_shortwave_flux_in_air", &zero);
+    id = SHORTWAVE ^ UPWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE;
+    add_flux_variable(file, id, "rsuscsaf", "upwelling_surface_shortwave_flux_in_air", &zero);
+    id = SHORTWAVE ^ DOWNWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE;
+    add_flux_variable(file, id, "rsdtcsaf", "downwelling_toa_shortwave_flux_in_air", &zero);
+    id = SHORTWAVE ^ DOWNWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE;
+    add_flux_variable(file, id, "rsdscsaf", "downwelling_surface_shortwave_flux_in_air", &zero);
+    file->lw_grid = lw_grid;
+    file->sw_grid = sw_grid;
     *output = file;
     return;
 }
@@ -573,25 +600,63 @@ void create_flux_file(Output_t **output, char const * const filepath,
 void close_flux_file(Output_t * const o)
 {
     nc_catch(nc_close(o->ncid));
-    free(o->varid);
-    free(o->dimid);
     return;
 }
 
 
 /*Write fluxes to the output file.*/
-void write_output(Output_t *output, VarId_t id, fp_t *data, int time, int column)
+void write_output(Output_t * output, unsigned int id, fp_t const * data, int time, int column)
 {
-    size_t num_levels;
-    nc_catch(nc_inq_dimlen(output->ncid, output->dimid[LEVEL], &num_levels));
-    size_t start = 0;
-    size_t count = num_levels;
-#ifdef SINGLE_PRECISION
-    nc_catch(nc_put_vara_float(output->ncid, output->varid[id], &start, &count, data))
-#else
-    nc_catch(nc_put_vara_double(output->ncid, output->varid[id], &start, &count, data))
-#endif
     (void)time;
-    (void)column;
+    SpectralGrid_t const * grid;
+    if (id == (LONGWAVE ^ UPWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE))
+    {
+        grid = output->lw_grid;
+    }
+    else if (id == (LONGWAVE ^ UPWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE))
+    {
+        grid = output->lw_grid;
+    }
+    else if (id == (LONGWAVE ^ DOWNWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE))
+    {
+        grid = output->lw_grid;
+    }
+    else if (id == (SHORTWAVE ^ UPWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE))
+    {
+        grid = output->sw_grid;
+    }
+    else if (id == (SHORTWAVE ^ UPWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE))
+    {
+        grid = output->sw_grid;
+    }
+    else if (id == (SHORTWAVE ^ DOWNWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE))
+    {
+        grid = output->sw_grid;
+    }
+    else if (id == (SHORTWAVE ^ DOWNWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE))
+    {
+        grid = output->sw_grid;
+    }
+    else
+    {
+        return;
+    }
+
+    /*Integrate the fluxes.*/
+    int i;
+    fp_t integrated_flux = 0.;
+    for (i=0; i<grid->n - 1; ++i)
+    {
+        integrated_flux += 0.5*(data[i] + data[i + 1])*grid->dw;
+    }
+
+    /*Write out the data.*/
+    size_t start = column;
+    size_t count = 1;
+#ifdef SINGLE_PRECISION
+    nc_catch(nc_put_vara_float(output->ncid, output->varid[id], &start, &count, &integrated_flux));
+#else
+    nc_catch(nc_put_vara_double(output->ncid, output->varid[id], &start, &count, &integrated_flux));
+#endif
     return;
 }

@@ -1,5 +1,5 @@
 CC = gcc
-CPPFLAGS = -Iutilities/src -Igas-optics/src -Ishortwave/src -Ilongwave/src -Iclouds -Iframework/src -Itesting_harness/src
+CPPFLAGS += -Iutilities/src -Igas-optics/src -Ishortwave/src -Ilongwave/src -Iclouds -Iframework/src -Itesting_harness/src
 CFLAGS = -g -O0 -Wall -Wextra -pedantic -fopenmp
 
 OBJECTS = build/longwave.o \
@@ -106,6 +106,9 @@ check: $(TESTS)
 
 
 circ: build/circ
+
+rfmip-irf: build/rfmip-irf
+	cd rfmip-irf/test && bash ./test_rfmip_irf
 
 # Core libraries.
 build/libgrtcode.a: $(OBJECTS)
@@ -384,14 +387,25 @@ build/test_verbosity: build/test_verbosity.o build/test_harness.o build/libgrtco
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $^ -lm
 
 # Applications.
+# CIRC.
 build/circ.o: circ/src/basic-circ-test.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ -c $<
 
 build/circ: framework/src/driver.c build/circ.o build/libclouds.a build/libgrtcode.a
 	$(CC) $(CPPFLAGS) -Icirc/src $(CFLAGS) -o $@ $^ -lm
 
+# Applications.
+# RFMIP-IRF
+build/rfmip-irf.o: rfmip-irf/src/rfmip-irf.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ -c $<
+
+build/rfmip-irf: framework/src/driver.c build/rfmip-irf.o build/libclouds.a build/libgrtcode.a
+	$(CC) $(CPPFLAGS) -Irfmip-irf/src $(CFLAGS) -o $@ $^ $(LDFLAGS) -lnetcdf -lm
+
+
 clean:
-	rm build/libgrtcode.a $(OBJECTS) build/driver.o
-	rm build/libclouds.a $(CLOUD_OBJECTS)
-	rm $(TEST_OBJECTS) $(TESTS)
-	rm circ circ.o
+	rm -f build/libgrtcode.a $(OBJECTS)
+	rm -f build/libclouds.a $(CLOUD_OBJECTS)
+	rm -f $(TEST_OBJECTS) $(TESTS)
+	rm -f build/circ build/circ.o
+	rm -f build/rfmip-irf build/rfmip-irf.o

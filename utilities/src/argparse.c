@@ -12,11 +12,11 @@
 #endif
 
 
-/*Check for whitespace and starting dashes in an argument name.*/
-static void check_name(char const * const name, /*Argument name.*/
-                       int * const one_dash, /*Flag telling if name starts with -.*/
-                       int * const two_dash, /*Flag telling if name starts with --.*/
-                       int const max_len /*Maximum allowed name length.*/
+/** @brief Check for whitespace and starting dashes in an argument name.*/
+static void check_name(char const * const name, /**< Argument name.*/
+                       int * const one_dash, /**< Flag telling if name starts with -.*/
+                       int * const two_dash, /**< Flag telling if name starts with --.*/
+                       int const max_len /**< Maximum allowed name length.*/
                       )
 {
     *one_dash = 0;
@@ -48,9 +48,9 @@ static void check_name(char const * const name, /*Argument name.*/
 }
 
 
-/*Get the basename of a path.*/
-static char * path_basename(char *path, /*File path.*/
-                            char seperator /*Path seperator.*/
+/** @brief Get the basename of a path.*/
+static char * path_basename(char *path, /**< File path.*/
+                            char seperator /**< Path seperator.*/
                            )
 {
     size_t index = 0;
@@ -66,8 +66,8 @@ static char * path_basename(char *path, /*File path.*/
 }
 
 
-/*Print usage message.*/
-static void print_usage(Parser_t const p /*Parser.*/
+/** @brief Print usage message.*/
+static void print_usage(Parser_t const p /**< Parser.*/
                        )
 {
     printf("\033[3mUsage: %s ", path_basename(p.argv[0], '/'));
@@ -93,8 +93,8 @@ static void print_usage(Parser_t const p /*Parser.*/
 }
 
 
-/*Print help message.*/
-static void print_help(Parser_t const p /*Parser.*/
+/** @brief Print help message.*/
+static void print_help(Parser_t const p /**< Parser.*/
                       )
 {
     print_usage(p);
