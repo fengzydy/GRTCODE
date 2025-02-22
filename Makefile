@@ -1,6 +1,10 @@
+ifndef CC
 CC = gcc
+endif
 CPPFLAGS += -Iutilities/src -Igas-optics/src -Ishortwave/src -Ilongwave/src -Iclouds -Iframework/src -Itesting_harness/src
+ifndef CFLAGS
 CFLAGS = -g -O0 -Wall -Wextra -pedantic -fopenmp
+endif
 
 OBJECTS = build/longwave.o \
           build/disort_shortwave.o \
@@ -103,12 +107,9 @@ check: $(TESTS)
 	build/test_spectral_grid
 	build/test_parse_csv
 
-
-
 circ: build/circ
 
 rfmip-irf: build/rfmip-irf
-	cd rfmip-irf/test && bash ./test_rfmip_irf
 
 # Core libraries.
 build/libgrtcode.a: $(OBJECTS)

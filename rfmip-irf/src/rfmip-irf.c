@@ -46,7 +46,7 @@
 
 enum dimid
 {
-    LEVEL = 0,
+    LEVEL = 254,
     COLUMN,
     NUM_DIMS
 };
@@ -54,7 +54,7 @@ enum dimid
 
 struct Output
 {
-    int dimid[32];
+    int dimid[256];
     int ncid;
     int varid[256];
     SpectralGrid_t const * lw_grid;
@@ -141,6 +141,8 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         nc_catch(nc_inq_dim(ncid, dimid, name, &num_columns));
         X = (int)num_columns - 1;
     }
+    atm.x = x;
+    atm.X = X;
     atm.num_columns = X - x + 1;
 
     /*Determine the number of levels.*/
@@ -572,8 +574,17 @@ void create_flux_file(Output_t **output, char const * const filepath,
 {
     Output_t * file = (Output_t *)malloc(sizeof(*file));
     nc_catch(nc_create(filepath, NC_NETCDF4, &(file->ncid)));
+    nc_catch(nc_put_att_int(file->ncid, NC_GLOBAL, "x_start", NC_INT, 1, &(atm->x)));
+    nc_catch(nc_put_att_int(file->ncid, NC_GLOBAL, "x_stop", NC_INT, 1, &(atm->X)));
     nc_catch(nc_def_dim(file->ncid, "level", atm->num_levels, &(file->dimid[LEVEL])));
+    nc_catch(nc_def_var(file->ncid, "level", NC_DOUBLE, 1, &(file->dimid[LEVEL]),
+                        &(file->varid[LEVEL])));
+    nc_catch(nc_put_att_text(file->ncid, file->varid[LEVEL], "axis", 2, "z"));
     nc_catch(nc_def_dim(file->ncid, "column", atm->num_columns, &(file->dimid[COLUMN])));
+    nc_catch(nc_def_var(file->ncid, "column", NC_DOUBLE, 1, &(file->dimid[COLUMN]),
+                        &(file->varid[COLUMN])));
+    nc_catch(nc_put_att_text(file->ncid, file->varid[COLUMN], "axis", 2, "x"));
+
     int id = LONGWAVE ^ UPWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE;
     add_flux_variable(file, id, "rlutcsaf", "upwelling_toa_longwave_flux_in_air", NULL);
     id = LONGWAVE ^ UPWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE;
@@ -589,6 +600,8 @@ void create_flux_file(Output_t **output, char const * const filepath,
     add_flux_variable(file, id, "rsdtcsaf", "downwelling_toa_shortwave_flux_in_air", &zero);
     id = SHORTWAVE ^ DOWNWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE;
     add_flux_variable(file, id, "rsdscsaf", "downwelling_surface_shortwave_flux_in_air", &zero);
+
+
     file->lw_grid = lw_grid;
     file->sw_grid = sw_grid;
     *output = file;

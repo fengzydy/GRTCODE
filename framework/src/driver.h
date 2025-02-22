@@ -111,6 +111,11 @@ typedef struct Atmosphere
     fp_t *surface_emissivity; /*Surface emissivity (time, column, wavenumber).*/
     fp_t *surface_temperature; /*Surface temperature [K] (time, column).*/
     fp_t *total_solar_irradiance; /*Total solar irradiance [W m-2] at TOA (time, column).*/
+
+    int x; /*Starting index for the x-dimension.*/
+    int X; /*Ending index for the x-dimension.*/
+    int y; /*Starting index for the y-dimension.*/
+    int Y; /*Ending index for the y-dimension.*/
 } Atmosphere_t;
 
 
