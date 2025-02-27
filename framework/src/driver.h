@@ -5,52 +5,90 @@
 #include "grtcode_utilities.h"
 
 
-#define LONGWAVE 1
-#define SHORTWAVE 2
-#define UPWARD 3
-#define DOWNWARD 4
-#define CLEARSKY 7
-#define CLOUDYSKY 8
-#define AEROSOL 15
-#define AEROSOLFREE 16
-#define TOP 31
-#define SURFACE 32
-
-
-typedef enum VarId
+typedef enum Variables
 {
-    RLDAF = 128,
+    TIME,
+    LATITUDE,
+    LONGITUDE,
+    COLUMN,
+    LAYER,
+    LEVEL,
+    LW_WAVENUMBER,
+    SW_WAVENUMBER,
+    OPTICAL_DEPTH,
+    VERTICALLY_INTEGRATED_OPTICAL_DEPTH,
+    H2O_VMR,
+    O3_VMR,
+    CH4_VMR,
+    CO2_VMR,
+    N2O_VMR,
+    LEVEL_TEMPERATURE,
+    LAYER_TEMPERATURE,
+    SURFACE_TEMPERATURE,
+    LEVEL_PRESSURE,
+    LAYER_PRESSURE,
+    RLD,
+    RLDAF,
     RLDCS,
     RLDCSAF,
+    RLDS,
+    RLDSAF,
+    RLDSCS,
+    RLDSCSAF,
+    RLU,
     RLUAF,
     RLUCS,
     RLUCSAF,
-    RLU,
-    RLD,
-    RSU,
-    RSD,
-    H2OVMR,
-    O3VMR,
-    CH4VMR,
-    CO2VMR,
-    N2OVMR,
-    TAU,
-    TLEV,
-    TLAY,
-    PLEV,
-    TS,
-    RLDSAF,
+    RLUS,
     RLUSAF,
-    RLUTAF,
-    RLDSCSAF,
+    RLUSCS,
     RLUSCSAF,
+    RLUT,
+    RLUTAF,
+    RLUTCS,
     RLUTCSAF,
+    RLD_USER_LEVEL,
+    RLDAF_USER_LEVEL,
+    RLDCS_USER_LEVEL,
+    RLDCSAF_USER_LEVEL,
+    RLU_USER_LEVEL,
+    RLUAF_USER_LEVEL,
+    RLUCS_USER_LEVEL,
+    RLUCSAF_USER_LEVEL,
+    RSD,
+    RSDAF,
+    RSDCS,
+    RSDCSAF,
+    RSDS,
+    RSDSAF,
+    RSDSCS,
     RSDSCSAF,
+    RSDT,
+    RSDTAF,
+    RSDTCS,
+    RSDTCSAF,
+    RSU,
+    RSUAF,
+    RSUCS,
+    RSUCSAF,
+    RSUS,
+    RSUSAF,
+    RSUSCS,
     RSUSCSAF,
+    RSUT,
+    RSUTAF,
+    RSUTCS,
     RSUTCSAF,
-    TAUZ,
+    RSD_USER_LEVEL,
+    RSDAF_USER_LEVEL,
+    RSDCS_USER_LEVEL,
+    RSDCSAF_USER_LEVEL,
+    RSU_USER_LEVEL,
+    RSUAF_USER_LEVEL,
+    RSUCS_USER_LEVEL,
+    RSUCSAF_USER_LEVEL,
     NUM_VARS
-} VarId_t;
+} Variables_t;
 
 
 typedef struct Cfc
@@ -65,6 +103,12 @@ typedef struct Cia
     int id[2]; /*GRTCODE CIA id of species.*/
     char path[valuelen]; /*Path to CIA cross-section file.*/
 } Cia_t;
+
+
+int is_longwave_flux(Variables_t id);
+
+
+int is_shortwave_flux(Variables_t id);
 
 
 typedef struct Atmosphere
@@ -114,28 +158,48 @@ typedef struct Atmosphere
 
     int x; /*Starting index for the x-dimension.*/
     int X; /*Ending index for the x-dimension.*/
-    int y; /*Starting index for the y-dimension.*/
-    int Y; /*Ending index for the y-dimension.*/
 } Atmosphere_t;
 
 
-typedef struct Output Output_t;
+/*The application developer must define this type.*/
+typedef struct Output Output_t; /*Structure used to create/write the output.*/
 
 
-void close_flux_file(Output_t * const output);
+/*The application developer must define this function.*/
+void close_flux_file(
+    Output_t * const output
+); /*Function to close the output dataset.*/
 
 
-void create_flux_file(Output_t **output, char const * const path, Atmosphere_t const * const atm,
-                      SpectralGrid_t const * const lw_grid, SpectralGrid_t const * const sw_grid);
+/*The application developer must define this function.*/
+void create_flux_file(
+    Output_t ** output,
+    char const * const path,
+    Atmosphere_t const * const atm,
+    SpectralGrid_t const * const lw_grid,
+    SpectralGrid_t const * const sw_grid,
+    int const user_level,
+    int const integrated /*Write out integrated flux output.*/
+);
 
 
-Atmosphere_t create_atmosphere(Parser_t * const parser);
+Atmosphere_t create_atmosphere(
+    Parser_t * const parser
+);
 
 
-void destroy_atmosphere(Atmosphere_t * atm);
+void destroy_atmosphere(
+    Atmosphere_t * atm
+);
 
 
-void write_output(Output_t *output, unsigned int id, fp_t const * data, int time, int column);
+void write_output(
+    Output_t * output,
+    Variables_t id,
+    fp_t const * data,
+    int time,
+    int column
+);
 
 
 #endif

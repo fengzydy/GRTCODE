@@ -109,6 +109,8 @@ check: $(TESTS)
 
 circ: build/circ
 
+era5: build/era5
+
 rfmip-irf: build/rfmip-irf
 
 # Core libraries.
@@ -396,6 +398,14 @@ build/circ: framework/src/driver.c build/circ.o build/libclouds.a build/libgrtco
 	$(CC) $(CPPFLAGS) -Icirc/src $(CFLAGS) -o $@ $^ -lm
 
 # Applications.
+# ERA5.
+build/era5.o: era5/src/era5.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ -c $<
+
+build/era5: framework/src/driver.c build/era5.o build/libclouds.a build/libgrtcode.a
+	$(CC) $(CPPFLAGS) -Icirc/src $(CFLAGS) -o $@ $^ -lm
+
+# Applications.
 # RFMIP-IRF
 build/rfmip-irf.o: rfmip-irf/src/rfmip-irf.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ -c $<
@@ -409,4 +419,5 @@ clean:
 	rm -f build/libclouds.a $(CLOUD_OBJECTS)
 	rm -f $(TEST_OBJECTS) $(TESTS)
 	rm -f build/circ build/circ.o
+	rm -f build/era5 build/era5.o
 	rm -f build/rfmip-irf build/rfmip-irf.o

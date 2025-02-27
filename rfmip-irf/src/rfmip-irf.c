@@ -44,14 +44,6 @@
 #endif
 
 
-enum dimid
-{
-    LEVEL = 254,
-    COLUMN,
-    NUM_DIMS
-};
-
-
 struct Output
 {
     int dimid[256];
@@ -59,6 +51,7 @@ struct Output
     int varid[256];
     SpectralGrid_t const * lw_grid;
     SpectralGrid_t const * sw_grid;
+    int integrated; /*Are the output values integrated (1) or spectrally resolved (0).*/
 };
 
 
@@ -536,12 +529,15 @@ void destroy_atmosphere(Atmosphere_t * const atm)
 
 
 /*Add a variable to the output file.*/
-static void add_flux_variable(Output_t * const o, /*Output object.*/
-                              VarId_t const index, /*Variable index.*/
-                              char const * const name, /*Variable name.*/
-                              char const * const standard_name, /*Variable standard name.*/
-                              fp_t const * const fill_value /*Fill value.*/
-                             )
+static void add_variable(Output_t * const o, /*Output object.*/
+                         Variables_t const index, /*Variable index.*/
+                         char const * const name, /*Variable name.*/
+                         char const * const standard_name, /*Variable standard name.*/
+                         char const * const units, /*Units.*/
+                         fp_t const * const fill_value, /*Fill value.*/
+                         int integrated,
+                         Variables_t wavenumber
+)
 {
 #ifdef SINGLE_PRESCISION
     nc_type type = NC_FLOAT;
@@ -549,9 +545,16 @@ static void add_flux_variable(Output_t * const o, /*Output object.*/
     nc_type type = NC_DOUBLE;
 #endif
     int varid;
-    nc_catch(nc_def_var(o->ncid, name, type, 1, &(o->dimid[COLUMN]), &varid));
-    char *unit = "W m-2";
-    nc_catch(nc_put_att_text(o->ncid, varid, "units", strlen(unit), unit));
+    if (integrated)
+    {
+        nc_catch(nc_def_var(o->ncid, name, type, 1, &(o->dimid[COLUMN]), &varid));
+    }
+    else
+    {
+        int dimids[2] = {o->dimid[COLUMN], o->dimid[wavenumber]};
+        nc_catch(nc_def_var(o->ncid, name, type, 2, dimids, &varid));
+    }
+    nc_catch(nc_put_att_text(o->ncid, varid, "units", strlen(units), units));
     nc_catch(nc_put_att_text(o->ncid, varid, "standard_name", strlen(standard_name),
                              standard_name));
     if (fill_value != NULL)
@@ -568,11 +571,18 @@ static void add_flux_variable(Output_t * const o, /*Output object.*/
 
 
 /*Create an output file and write metadata.*/
-void create_flux_file(Output_t **output, char const * const filepath,
+void create_flux_file(Output_t ** output, char const * const filepath,
                       Atmosphere_t const * const atm, SpectralGrid_t const * const lw_grid,
-                      SpectralGrid_t const * const sw_grid)
+                      SpectralGrid_t const * const sw_grid, int user_level,
+                      int integrated)
 {
     Output_t * file = (Output_t *)malloc(sizeof(*file));
+    int i;
+    for (i=0; i<256; ++i)
+    {
+        file->dimid[i] = -1;
+        file->varid[i] = -1;
+    }
     nc_catch(nc_create(filepath, NC_NETCDF4, &(file->ncid)));
     nc_catch(nc_put_att_int(file->ncid, NC_GLOBAL, "x_start", NC_INT, 1, &(atm->x)));
     nc_catch(nc_put_att_int(file->ncid, NC_GLOBAL, "x_stop", NC_INT, 1, &(atm->X)));
@@ -584,26 +594,58 @@ void create_flux_file(Output_t **output, char const * const filepath,
     nc_catch(nc_def_var(file->ncid, "column", NC_DOUBLE, 1, &(file->dimid[COLUMN]),
                         &(file->varid[COLUMN])));
     nc_catch(nc_put_att_text(file->ncid, file->varid[COLUMN], "axis", 2, "x"));
+    if (!integrated)
+    {
+        nc_catch(nc_def_dim(file->ncid, "lw_wavenumber", lw_grid->n, &(file->dimid[LW_WAVENUMBER])));
+        nc_catch(nc_def_var(file->ncid, "lw_wavenumber", NC_DOUBLE, 1, &(file->dimid[LW_WAVENUMBER]),
+                            &(file->varid[LW_WAVENUMBER])));
+        nc_catch(nc_put_att_text(file->ncid, file->varid[LW_WAVENUMBER], "units", 5, "cm-1"));
+        nc_catch(nc_def_dim(file->ncid, "sw_wavenumber", sw_grid->n, &(file->dimid[SW_WAVENUMBER])));
+        nc_catch(nc_def_var(file->ncid, "sw_wavenumber", NC_DOUBLE, 1, &(file->dimid[SW_WAVENUMBER]),
+                            &(file->varid[SW_WAVENUMBER])));
+        nc_catch(nc_put_att_text(file->ncid, file->varid[LW_WAVENUMBER], "units", 5, "cm-1"));
+    }
 
-    int id = LONGWAVE ^ UPWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE;
-    add_flux_variable(file, id, "rlutcsaf", "upwelling_toa_longwave_flux_in_air", NULL);
-    id = LONGWAVE ^ UPWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE;
-    add_flux_variable(file, id, "rluscsaf", "upwelling_surface_longwave_flux_in_air", NULL);
-    id = LONGWAVE ^ DOWNWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE;
-    add_flux_variable(file, id, "rldscsaf", "downwelling_surface_longwave_flux_in_air", NULL);
+    add_variable(file, RLUTCSAF, "rlutcsaf", "upwelling_toa_longwave_flux_in_air", "W m-2",
+                 NULL, integrated, LW_WAVENUMBER);
+    add_variable(file, RLUSCSAF, "rluscsaf", "upwelling_surface_longwave_flux_in_air", "W m-2",
+                 NULL, integrated, LW_WAVENUMBER);
+    add_variable(file, RLDSCSAF, "rldscsaf", "downwelling_surface_longwave_flux_in_air", "W m-2",
+                 NULL, integrated, LW_WAVENUMBER);
+
+    add_variable(file, RLDCSAF_USER_LEVEL, "rldcsaf_level", "downwelling_longwave_flux_in_air",
+                 "W m-2", NULL, integrated, LW_WAVENUMBER);
+    nc_catch(nc_put_att_int(file->ncid, file->varid[RLDCSAF_USER_LEVEL], "level",
+                            NC_INT, 1, &user_level));
+
+    add_variable(file, RLUCSAF_USER_LEVEL, "rlucsaf_level", "upwelling_longwave_flux_in_air",
+                 "W m-2", NULL, integrated, LW_WAVENUMBER);
+    nc_catch(nc_put_att_int(file->ncid, file->varid[RLUCSAF_USER_LEVEL], "level",
+                            NC_INT, 1, &user_level));
+
     fp_t const zero = 0;
-    id = SHORTWAVE ^ UPWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE;
-    add_flux_variable(file, id, "rsutcsaf", "upwelling_toa_shortwave_flux_in_air", &zero);
-    id = SHORTWAVE ^ UPWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE;
-    add_flux_variable(file, id, "rsuscsaf", "upwelling_surface_shortwave_flux_in_air", &zero);
-    id = SHORTWAVE ^ DOWNWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE;
-    add_flux_variable(file, id, "rsdtcsaf", "downwelling_toa_shortwave_flux_in_air", &zero);
-    id = SHORTWAVE ^ DOWNWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE;
-    add_flux_variable(file, id, "rsdscsaf", "downwelling_surface_shortwave_flux_in_air", &zero);
+    add_variable(file, RSUTCSAF, "rsutcsaf", "upwelling_toa_shortwave_flux_in_air", "W m-2",
+                 &zero, integrated, SW_WAVENUMBER);
+    add_variable(file, RSUSCSAF, "rsuscsaf", "upwelling_surface_shortwave_flux_in_air", "W m-2",
+                 &zero, integrated, SW_WAVENUMBER);
+    add_variable(file, RSDTCSAF, "rsdtcsaf", "downwelling_toa_shortwave_flux_in_air", "W m-2",
+                 &zero, integrated, SW_WAVENUMBER);
+    add_variable(file, RSDSCSAF, "rsdscsaf", "downwelling_surface_shortwave_flux_in_air", "W m-2",
+                 &zero, integrated, SW_WAVENUMBER);
 
+    add_variable(file, RSDCSAF_USER_LEVEL, "rsdcsaf_level", "downwelling_shortwave_flux_in_air",
+                 "W m-2", &zero, integrated, SW_WAVENUMBER);
+    nc_catch(nc_put_att_int(file->ncid, file->varid[RSDCSAF_USER_LEVEL], "level",
+                            NC_INT, 1, &user_level));
+
+    add_variable(file, RSUCSAF_USER_LEVEL, "rsucsaf_level", "upwelling_shortwave_flux_in_air",
+                 "W m-2", NULL, integrated, SW_WAVENUMBER);
+    nc_catch(nc_put_att_int(file->ncid, file->varid[RSUCSAF_USER_LEVEL], "level",
+                            NC_INT, 1, &user_level));
 
     file->lw_grid = lw_grid;
     file->sw_grid = sw_grid;
+    file->integrated = integrated;
     *output = file;
     return;
 }
@@ -618,58 +660,36 @@ void close_flux_file(Output_t * const o)
 
 
 /*Write fluxes to the output file.*/
-void write_output(Output_t * output, unsigned int id, fp_t const * data, int time, int column)
+void write_output(Output_t * output, Variables_t id, fp_t const * data, int time, int column)
 {
     (void)time;
-    SpectralGrid_t const * grid;
-    if (id == (LONGWAVE ^ UPWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE))
+    if (output->varid[id] < 0)
     {
-        grid = output->lw_grid;
-    }
-    else if (id == (LONGWAVE ^ UPWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE))
-    {
-        grid = output->lw_grid;
-    }
-    else if (id == (LONGWAVE ^ DOWNWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE))
-    {
-        grid = output->lw_grid;
-    }
-    else if (id == (SHORTWAVE ^ UPWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE))
-    {
-        grid = output->sw_grid;
-    }
-    else if (id == (SHORTWAVE ^ UPWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE))
-    {
-        grid = output->sw_grid;
-    }
-    else if (id == (SHORTWAVE ^ DOWNWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE))
-    {
-        grid = output->sw_grid;
-    }
-    else if (id == (SHORTWAVE ^ DOWNWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE))
-    {
-        grid = output->sw_grid;
-    }
-    else
-    {
+        /*This variable is not in the output file, so just silently return.*/
         return;
     }
 
-    /*Integrate the fluxes.*/
-    int i;
-    fp_t integrated_flux = 0.;
-    for (i=0; i<grid->n - 1; ++i)
+    /*Get the data size.*/
+    size_t start[2] = {column, 0};
+    size_t count[2] = {1, 1};
+    SpectralGrid_t const * grid;
+    if (!output->integrated)
     {
-        integrated_flux += 0.5*(data[i] + data[i + 1])*grid->dw;
+        if (is_longwave_flux(id))
+        {
+            count[1] = output->lw_grid->n;
+        }
+        else if (is_shortwave_flux(id))
+        {
+            count[1] = output->sw_grid->n;
+        }
     }
 
     /*Write out the data.*/
-    size_t start = column;
-    size_t count = 1;
 #ifdef SINGLE_PRECISION
-    nc_catch(nc_put_vara_float(output->ncid, output->varid[id], &start, &count, &integrated_flux));
+    nc_catch(nc_put_vara_float(output->ncid, output->varid[id], start, count, data));
 #else
-    nc_catch(nc_put_vara_double(output->ncid, output->varid[id], &start, &count, &integrated_flux));
+    nc_catch(nc_put_vara_double(output->ncid, output->varid[id], start, count, data));
 #endif
     return;
 }

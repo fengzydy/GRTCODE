@@ -224,15 +224,14 @@ static int calculate_aerosol_optics(AtmosphericColumn_t atm_column, /*Atmospheri
     int j;
     for (j=0; j<atm_column.num_layers; ++j)
     {
-        n = i*atm_column.num_layers*atm_column.aerosol_grid_size + j*atm_column.aerosol_grid_size;
-        catch(interpolate_to_grid(aerosol->grid, atm.aerosol_grid, &(atm.aerosol_optical_depth[n]),
-                                  atm.aerosol_grid_size, &(tau[j*aerosol->grid.n]),
+        catch(interpolate_to_grid(aerosol->grid, atm_column.aerosol_grid, &(atm_column.aerosol_optical_depth[n]),
+                                  atm_column.aerosol_grid_size, &(tau[j*aerosol->grid.n]),
                                   linear_sample, NULL));
-        catch(interpolate_to_grid(aerosol->grid, atm.aerosol_grid, &(atm.aerosol_single_scatter_albedo[n]),
-                                  atm.aerosol_grid_size, &(omega[j*aerosol->grid.n]),
+        catch(interpolate_to_grid(aerosol->grid, atm_column.aerosol_grid, &(atm_column.aerosol_single_scatter_albedo[n]),
+                                  atm_column.aerosol_grid_size, &(omega[j*aerosol->grid.n]),
                                   linear_sample, NULL));
-        catch(interpolate_to_grid(aerosol->grid, atm.aerosol_grid, &(atm.aerosol_asymmetry_factor[n]),
-                                  atm.aerosol_grid_size, &(g[j*aerosol->grid.n]),
+        catch(interpolate_to_grid(aerosol->grid, atm_column.aerosol_grid, &(atm_column.aerosol_asymmetry_factor[n]),
+                                  atm_column.aerosol_grid_size, &(g[j*aerosol->grid.n]),
                                   linear_sample, NULL));
     }
     catch(update_optics(aerosol, tau, omega, g));
@@ -271,6 +270,92 @@ static int calculate_gas_optics(GasOptics_t * const lbl, /*Gas optics object.*/
 }
 
 
+typedef enum OutputVariable
+{
+    UP_TOA,
+    UP_SURFACE,
+    UP_USER_LEVEL,
+    DOWN_TOA,
+    DOWN_SURFACE,
+    DOWN_USER_LEVEL
+} OutputVariable_t;
+
+
+/*Output the fluxes.*/
+static int output_fluxes(Output_t * output, int ids[6], SpectralGrid_t grid,
+                         fp_t * flux_up, fp_t * flux_down, int num_levels,
+                         int user_level, int integrated, int time_index,
+                         int column_index)
+{
+
+    int surface = grid.n*(num_levels - 1);
+    int level = grid.n*user_level;
+
+    /* Integrate the fluxes if necessary and point to the correct data.*/
+    fp_t * data[6];
+    fp_t integrated_flux_up_toa = 0.;
+    fp_t integrated_flux_up_surface = 0.;
+    fp_t integrated_flux_up_user_level = 0.;
+    fp_t integrated_flux_down_toa = 0.;
+    fp_t integrated_flux_down_surface = 0.;
+    fp_t integrated_flux_down_user_level = 0.;
+    if (integrated)
+    {
+        int i;
+        for (i=0; i<grid.n - 1; ++i)
+        {
+            integrated_flux_up_toa += 0.5*(flux_up[i] + flux_up[i + 1])*grid.dw;
+            integrated_flux_up_surface += 0.5*(flux_up[surface + i] + flux_up[surface + i + 1])*grid.dw;
+            integrated_flux_down_toa += 0.5*(flux_up[i] + flux_up[i + 1])*grid.dw;
+            integrated_flux_down_surface += 0.5*(flux_up[surface + i] + flux_up[surface + i + 1])*grid.dw;
+        }
+        if (user_level >= 0)
+        {
+            for (i=0; i<grid.n - 1; ++i)
+            {
+                integrated_flux_up_user_level += 0.5*(flux_up[level + i] + flux_up[level + i + 1])*grid.dw;
+                integrated_flux_down_user_level += 0.5*(flux_up[level + i] + flux_up[level + i + 1])*grid.dw;
+            }
+        }
+        data[UP_TOA] = &integrated_flux_up_toa;
+        data[UP_SURFACE] = &integrated_flux_up_surface;
+        data[UP_USER_LEVEL] = &integrated_flux_up_user_level;
+        data[DOWN_TOA] = &integrated_flux_down_toa;
+        data[DOWN_SURFACE] = &integrated_flux_down_surface;
+        data[DOWN_USER_LEVEL] = &integrated_flux_down_user_level;
+    }
+    else
+    {
+        data[UP_TOA] = flux_up;
+        data[UP_SURFACE] = &(flux_up[surface]);
+        data[DOWN_TOA] = flux_down;
+        data[DOWN_SURFACE] = &(flux_down[surface]);
+        if (user_level >= 0)
+        {
+            data[UP_USER_LEVEL] = &(flux_up[level]);
+            data[DOWN_USER_LEVEL] = &(flux_down[level]);
+        }
+        else
+        {
+            data[UP_USER_LEVEL] = NULL;
+            data[DOWN_USER_LEVEL] = NULL;
+        }
+    }
+
+    /*Write out the fluxes.*/
+    write_output(output, ids[UP_TOA], data[UP_TOA], time_index, column_index);
+    write_output(output, ids[UP_SURFACE], data[UP_SURFACE], time_index, column_index);
+    write_output(output, ids[DOWN_TOA], data[DOWN_TOA], time_index, column_index);
+    write_output(output, ids[DOWN_SURFACE], data[DOWN_SURFACE], time_index, column_index);
+    if (user_level >= 0)
+    {
+        write_output(output, ids[UP_USER_LEVEL], data[UP_USER_LEVEL], time_index, column_index);
+        write_output(output, ids[DOWN_USER_LEVEL], data[DOWN_USER_LEVEL], time_index, column_index);
+    }
+    return GRTCODE_SUCCESS;
+}
+
+
 /*Calculate the fluxes in a single atmospheric column.*/
 static int column_calculation(int label,
                               AtmosphericColumn_t atm_column,
@@ -286,7 +371,9 @@ static int column_calculation(int label,
                               SpectralGrid_t grid,
                               Output_t * output,
                               int time_index,
-                              int column_index
+                              int column_index,
+                              int user_level,
+                              int integrated
 )
 {
     /*Gas optics.*/
@@ -295,7 +382,7 @@ static int column_calculation(int label,
     Optics_t const * optics_array[4] = {&optics_gas, &optics_rayleigh, NULL, NULL};
     catch(add_optics(optics_array, 2, &optics_total));
 
-    unsigned int regime;
+    int ids[6];
     if (label == LONGWAVE_PASS)
     {
         /*Longwave clear-clean-sky fluxes.*/
@@ -305,7 +392,14 @@ static int column_calculation(int label,
                                   atm_column.level_temperature,
                                   atm_column.emissivity,
                                   flux_up, flux_down));
-        regime = LONGWAVE;
+        ids[UP_TOA] = RLUTCSAF;
+        ids[UP_SURFACE] = RLUSCSAF;
+        ids[UP_USER_LEVEL] = RLUCSAF_USER_LEVEL;
+        ids[DOWN_TOA] = -1;
+        ids[DOWN_SURFACE] = RLDSCSAF;
+        ids[DOWN_USER_LEVEL] = RLDCSAF_USER_LEVEL;
+        catch(output_fluxes(output, ids, grid, flux_up, flux_down, atm_column.num_levels,
+                            user_level, integrated, time_index, column_index));
     }
     else
     {
@@ -318,21 +412,16 @@ static int column_calculation(int label,
                                   atm_column.total_solar_irradiance,
                                   atm_column.incident_solar_flux,
                                   flux_up, flux_down));
-        regime = SHORTWAVE;
+        ids[UP_TOA] = RSUTCSAF;
+        ids[UP_SURFACE] = RSUSCSAF;
+        ids[UP_USER_LEVEL] = RSUCSAF_USER_LEVEL;
+        ids[DOWN_TOA] = RSDTCSAF;
+        ids[DOWN_SURFACE] = RSDSCSAF;
+        ids[DOWN_USER_LEVEL] = RSDCSAF_USER_LEVEL;
+        catch(output_fluxes(output, ids, grid, flux_up, flux_down, atm_column.num_levels,
+                            user_level, integrated, time_index, column_index));
     }
     catch(destroy_optics(&optics_total));
-    int n = grid.n*(atm_column.num_levels - 1);
-    write_output(output, (unsigned int)(regime ^ UPWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE),
-                 flux_up, time_index, column_index);
-    write_output(output, (unsigned int)(regime ^ UPWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE),
-                 &(flux_up[n]), time_index, column_index);
-    write_output(output, (unsigned int)(regime ^ DOWNWARD ^ SURFACE ^ CLEARSKY ^ AEROSOLFREE),
-                 &(flux_down[n]), time_index, column_index);
-    if (label != LONGWAVE_PASS)
-    {
-        write_output(output, (unsigned int)(regime ^ DOWNWARD ^ TOP ^ CLEARSKY ^ AEROSOLFREE),
-                     flux_down, time_index, column_index);
-    }
 
     if (!atm_column.clean)
     {
@@ -350,6 +439,14 @@ static int column_calculation(int label,
                                       atm_column.level_temperature,
                                       atm_column.emissivity,
                                       flux_up, flux_down));
+            ids[UP_TOA] = RLUTCS;
+            ids[UP_SURFACE] = RLUSCS;
+            ids[UP_USER_LEVEL] = RLUCS_USER_LEVEL;
+            ids[DOWN_TOA] = -1;
+            ids[DOWN_SURFACE] = RLDSCS;
+            ids[DOWN_USER_LEVEL] = RLDCS_USER_LEVEL;
+            catch(output_fluxes(output, ids, grid, flux_up, flux_down, atm_column.num_levels,
+                                user_level, integrated, time_index, column_index));
         }
         else
         {
@@ -362,15 +459,16 @@ static int column_calculation(int label,
                                       atm_column.total_solar_irradiance,
                                       atm_column.incident_solar_flux,
                                       flux_up, flux_down));
+            ids[UP_TOA] = RSUTCS;
+            ids[UP_SURFACE] = RSUSCS;
+            ids[UP_USER_LEVEL] = RSUCS_USER_LEVEL;
+            ids[DOWN_TOA] = RSDTCS;
+            ids[DOWN_SURFACE] = RSDSCS;
+            ids[DOWN_USER_LEVEL] = RSDCS_USER_LEVEL;
+            catch(output_fluxes(output, ids, grid, flux_up, flux_down, atm_column.num_levels,
+                                user_level, integrated, time_index, column_index));
         }
         catch(destroy_optics(&optics_total));
-        n = grid.n*(atm_column.num_levels - 1);
-        write_output(output, (unsigned int)(regime ^ UPWARD ^ TOP ^ CLEARSKY ^ AEROSOL),
-                     flux_up, time_index, column_index);
-        write_output(output, (unsigned int)(regime ^ UPWARD ^ SURFACE ^ CLEARSKY ^ AEROSOL),
-                     &(flux_up[n]), time_index, column_index);
-        write_output(output, (unsigned int)(regime ^ DOWNWARD ^ SURFACE ^ CLEARSKY ^ AEROSOL),
-                     &(flux_down[n]), time_index, column_index);
     }
 
     if (!atm_column.clear)
@@ -466,13 +564,28 @@ static int column_calculation(int label,
             flux_up_sum[j] /= (double)num_subcolumns;
             flux_down_sum[j] /= (double)num_subcolumns;
         }
-        n = grid.n*(atm_column.num_levels - 1);
-        write_output(output, (unsigned int)(regime ^ UPWARD ^ TOP ^ CLOUDYSKY ^ AEROSOLFREE),
-                     flux_up, time_index, column_index);
-        write_output(output, (unsigned int)(regime ^ UPWARD ^ SURFACE ^ CLOUDYSKY ^ AEROSOLFREE), 
-                     &(flux_up[n]), time_index, column_index);
-        write_output(output, (unsigned int)(regime ^ DOWNWARD ^ SURFACE ^ CLOUDYSKY ^ AEROSOLFREE),
-                     &(flux_down[n]), time_index, column_index);
+        if (label == LONGWAVE_PASS)
+        {
+            ids[UP_TOA] = RLUTAF;
+            ids[UP_SURFACE] = RLUSAF;
+            ids[UP_USER_LEVEL] = RLUAF_USER_LEVEL;
+            ids[DOWN_TOA] = -1;
+            ids[DOWN_SURFACE] = RLDSAF;
+            ids[DOWN_USER_LEVEL] = RLDAF_USER_LEVEL;
+            catch(output_fluxes(output, ids, grid, flux_up_sum, flux_down_sum, atm_column.num_levels,
+                                user_level, integrated, time_index, column_index));
+        }
+        else
+        {
+            ids[UP_TOA] = RSUTAF;
+            ids[UP_SURFACE] = RSUSAF;
+            ids[UP_USER_LEVEL] = RSUAF_USER_LEVEL;
+            ids[DOWN_TOA] = RSDTAF;
+            ids[DOWN_SURFACE] = RSDSAF;
+            ids[DOWN_USER_LEVEL] = RSDAF_USER_LEVEL;
+            catch(output_fluxes(output, ids, grid, flux_up_sum, flux_down_sum, atm_column.num_levels,
+                                user_level, integrated, time_index, column_index));
+        }
     }
     return GRTCODE_SUCCESS;
 }
@@ -487,8 +600,10 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
                   Output_t * const output, /*Output object.*/
                   char const * const beta_path, /*Path to beta distribution input file.*/
                   char const * const ice_path, /*Path to ice cloud parameterization input file.*/
-                  char const * const liquid_path /*Path to liquid cloud parameterization input file.*/
-                 )
+                  char const * const liquid_path, /*Path to liquid cloud parameterization input file.*/
+                  int const user_level,
+                  int const integrated /*Write out integrated flux values (instead of spectrally-resolved).*/
+)
 {
     /*Intialize gas optics objects.*/
     GasOptics_t lbl_lw;
@@ -579,27 +694,43 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
                                      optics_lw_rayleigh, optics_lw_aerosol,
                                      optics_lw_liquid_cloud, optics_lw_ice_cloud,
                                      (void *)&longwave, lw_flux_up, lw_flux_down, lw_grid,
-                                     output, t, i));
+                                     output, t, i, user_level, integrated));
             if (atm_column.cosine_zenith_angle > 0.)
             {
                 catch(column_calculation(SHORTWAVE_PASS, atm_column, lbl_sw, optics_sw_gas,
                                          optics_sw_rayleigh, optics_sw_aerosol,
                                          optics_sw_liquid_cloud, optics_sw_ice_cloud,
                                          (void *)&shortwave, sw_flux_up, sw_flux_down,
-                                         sw_grid, output, t, i));
+                                         sw_grid, output, t, i, user_level, integrated));
             }
 
-/*
-            write_output(output, PLEV, atm_column.level_pressure, t, i);
-            write_output(output, TLEV, atm_column.level_temperature, t, i);
-            write_output(output, TLAY, atm_column.layer_temperature, t, i);
-            write_output(output, TS, &(atm_column.surface_temperature), t, i);
+            /*Write out the atmospheric state variables (if the application wants them).*/
+            write_output(output, LEVEL_PRESSURE, atm_column.level_pressure, t, i);
+            write_output(output, LAYER_TEMPERATURE, atm_column.layer_temperature, t, i);
+            write_output(output, LEVEL_TEMPERATURE, atm_column.level_temperature, t, i);
+            write_output(output, SURFACE_TEMPERATURE, &(atm_column.surface_temperature), t, i);
             int j;
             for (j=0; j<atm.num_molecules; ++j)
             {
-                write_output(output, H2OVMR + j, atm_column.ppmv[j], t, i);
+                switch (atm.molecules[j])
+                {
+                    case H2O:
+                        write_output(output, H2O_VMR, atm_column.ppmv[j], t, i);
+                        break;
+                    case O3_VMR:
+                        write_output(output, O3_VMR, atm_column.ppmv[j], t, i);
+                        break;
+                    case CH4_VMR:
+                        write_output(output, CH4_VMR, atm_column.ppmv[j], t, i);
+                        break;
+                    case CO2_VMR:
+                        write_output(output, CO2_VMR, atm_column.ppmv[j], t, i);
+                        break;
+                    case N2O_VMR:
+                        write_output(output, N2O_VMR, atm_column.ppmv[j], t, i);
+                        break;
+                }
             }
-*/
         }
     }
 
@@ -638,6 +769,90 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
 }
 
 
+/*Is the variable a longwave flux variable?*/
+int is_longwave_flux(Variables_t id)
+{
+    switch(id)
+    {
+        case RLD:
+        case RLDAF:
+        case RLDCS:
+        case RLDCSAF:
+        case RLDS:
+        case RLDSAF:
+        case RLDSCS:
+        case RLDSCSAF:
+        case RLU:
+        case RLUAF:
+        case RLUCS:
+        case RLUCSAF:
+        case RLUS:
+        case RLUSAF:
+        case RLUSCS:
+        case RLUSCSAF:
+        case RLUT:
+        case RLUTAF:
+        case RLUTCS:
+        case RLUTCSAF:
+        case RLD_USER_LEVEL:
+        case RLDAF_USER_LEVEL:
+        case RLDCS_USER_LEVEL:
+        case RLDCSAF_USER_LEVEL:
+        case RLU_USER_LEVEL:
+        case RLUAF_USER_LEVEL:
+        case RLUCS_USER_LEVEL:
+        case RLUCSAF_USER_LEVEL:
+            return 1;
+            break;
+    }
+    return 0;
+}
+
+
+/*Is the variable a shortwave flux variable?*/
+int is_shortwave_flux(Variables_t id)
+{
+    switch(id)
+    {
+        case RSD:
+        case RSDAF:
+        case RSDCS:
+        case RSDCSAF:
+        case RSDS:
+        case RSDSAF:
+        case RSDSCS:
+        case RSDSCSAF:
+        case RSDT:
+        case RSDTAF:
+        case RSDTCS:
+        case RSDTCSAF:
+        case RSU:
+        case RSUAF:
+        case RSUCS:
+        case RSUCSAF:
+        case RSUS:
+        case RSUSAF:
+        case RSUSCS:
+        case RSUSCSAF:
+        case RSUT:
+        case RSUTAF:
+        case RSUTCS:
+        case RSUTCSAF:
+        case RSD_USER_LEVEL:
+        case RSDAF_USER_LEVEL:
+        case RSDCS_USER_LEVEL:
+        case RSDCSAF_USER_LEVEL:
+        case RSU_USER_LEVEL:
+        case RSUAF_USER_LEVEL:
+        case RSUCS_USER_LEVEL:
+        case RSUCSAF_USER_LEVEL:
+            return 1;
+            break;
+    }
+    return 0;
+}
+
+
 /*Main driver program.  When linking an executable, the user must provide an object file that
   includes implementations for the following defined in driver.h:
    - struct output;
@@ -657,7 +872,9 @@ int main(int argc, char **argv)
     add_argument(&parser, "-beta-path", NULL, "Path to beta distribution input file.", &one);
     add_argument(&parser, "-c", "--line-cutoff", "Cutoff [1/cm] from line center.", &one);
     add_argument(&parser, "-d", "--device", "GPU id", &one);
+    add_argument(&parser, "-flux-at-level", NULL, "Interior level to output fluxes at.", &one);
     add_argument(&parser, "-ice-path", NULL, "Path to ice cloud parameterization input file.", &one);
+    add_argument(&parser, "-integrated", NULL, "Output integrated flux (instead of spectrally-resolved).", NULL);
     add_argument(&parser, "-liquid-path", NULL, "Path to liquid cloud parameterization input file.", &one);
     add_argument(&parser, "-o", NULL, "Name of output file.", &one);
     add_argument(&parser, "-r-lw", "--lw-resolution", "Longwave spectral resolution [1/cm].", &one);
@@ -706,12 +923,15 @@ int main(int argc, char **argv)
     catch(create_device(&device, device_id));
 
     /*Initialize the output file.*/
+    int integrated = get_argument(parser, "-integrated", NULL) ? 1 : 0;
+    int user_level = get_argument(parser, "-flux-at-level", buffer) ? atoi(buffer) : -1;
     if (!get_argument(parser, "-o", buffer))
     {
         snprintf(buffer, valuelen, "%s", "output.nc");
     }
     Output_t * output;
-    create_flux_file(&output, buffer, &atm, &lw_grid, &sw_grid);
+    create_flux_file(&output, buffer, &atm, &lw_grid, &sw_grid,
+                     user_level, integrated);
 
     /*Get cloud parameterization inputs.*/
     char beta_path[valuelen];
@@ -732,7 +952,7 @@ int main(int argc, char **argv)
 
     /*Calculate the fluxes over all the columns.*/
     catch(driver(atm, hitran_path, solar_flux_path, lw_grid, sw_grid, device, output,
-                 beta_path, ice_path, liquid_path));
+                 beta_path, ice_path, liquid_path, user_level, integrated));
 
     /*Clean up.*/
     close_flux_file(output);
