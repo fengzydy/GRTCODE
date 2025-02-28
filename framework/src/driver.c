@@ -36,7 +36,7 @@
         fprintf(stderr, "[%s, %d] Error:\n", __FILE__, __LINE__); \
         char b_[1024]; \
         grtcode_errstr(e_, b_, 1024); \
-        fprintf(stderr, "%s", b_); \
+        fprintf(stderr, "%s\n", b_); \
         return EXIT_FAILURE; \
     }}
 
@@ -126,7 +126,7 @@ static int atmospheric_column(AtmosphericColumn_t * column,
     if (atmosphere.num_molecules > MAX_SIZE)
     {
         fprintf(stderr, "[%s, %d] Error:\n", __FILE__, __LINE__); \
-        fprintf(stderr, "MAX_SIZE is too small for the number of molecules (%d) used.",
+        fprintf(stderr, "MAX_SIZE is too small for the number of molecules (%d) used.\n",
                 atmosphere.num_molecules);
             return EXIT_FAILURE;
     }
@@ -140,7 +140,7 @@ static int atmospheric_column(AtmosphericColumn_t * column,
     if (atmosphere.num_cfcs > MAX_SIZE)
     {
         fprintf(stderr, "[%s, %d] Error:\n", __FILE__, __LINE__); \
-        fprintf(stderr, "MAX_SIZE is too small for the number of cfcs (%d) used.",
+        fprintf(stderr, "MAX_SIZE is too small for the number of cfcs (%d) used.\n",
                 atmosphere.num_cfcs);
             return EXIT_FAILURE;
     }
@@ -154,7 +154,7 @@ static int atmospheric_column(AtmosphericColumn_t * column,
     if (atmosphere.num_cfcs > MAX_SIZE)
     {
         fprintf(stderr, "[%s, %d] Error:\n", __FILE__, __LINE__); \
-        fprintf(stderr, "MAX_SIZE is too small for the number of CIA species (%d) used.",
+        fprintf(stderr, "MAX_SIZE is too small for the number of CIA species (%d) used.\n",
                 atmosphere.num_cia_species);
             return EXIT_FAILURE;
     }
@@ -272,7 +272,7 @@ static int calculate_gas_optics(GasOptics_t * const lbl, /*Gas optics object.*/
 
 typedef enum OutputVariable
 {
-    UP_TOA,
+    UP_TOA = 0,
     UP_SURFACE,
     UP_USER_LEVEL,
     DOWN_TOA,
@@ -306,15 +306,15 @@ static int output_fluxes(Output_t * output, int ids[6], SpectralGrid_t grid,
         {
             integrated_flux_up_toa += 0.5*(flux_up[i] + flux_up[i + 1])*grid.dw;
             integrated_flux_up_surface += 0.5*(flux_up[surface + i] + flux_up[surface + i + 1])*grid.dw;
-            integrated_flux_down_toa += 0.5*(flux_up[i] + flux_up[i + 1])*grid.dw;
-            integrated_flux_down_surface += 0.5*(flux_up[surface + i] + flux_up[surface + i + 1])*grid.dw;
+            integrated_flux_down_toa += 0.5*(flux_down[i] + flux_down[i + 1])*grid.dw;
+            integrated_flux_down_surface += 0.5*(flux_down[surface + i] + flux_down[surface + i + 1])*grid.dw;
         }
         if (user_level >= 0)
         {
             for (i=0; i<grid.n - 1; ++i)
             {
                 integrated_flux_up_user_level += 0.5*(flux_up[level + i] + flux_up[level + i + 1])*grid.dw;
-                integrated_flux_down_user_level += 0.5*(flux_up[level + i] + flux_up[level + i + 1])*grid.dw;
+                integrated_flux_down_user_level += 0.5*(flux_down[level + i] + flux_down[level + i + 1])*grid.dw;
             }
         }
         data[UP_TOA] = &integrated_flux_up_toa;
@@ -653,7 +653,7 @@ static int driver(Atmosphere_t const atm, /*Atmospheric state.*/
         {
             fprintf(stderr, "[%s, %d] Error:\n", __FILE__, __LINE__); \
             fprintf(stderr, "-beta-path, -ice-path, and -liquid-path args required when"
-                            " running with clouds.");
+                            " running with clouds.\n");
             return EXIT_FAILURE;
         }
         initialize_clouds_lib(beta_path, ice_path, liquid_path, NULL);
@@ -924,7 +924,19 @@ int main(int argc, char **argv)
 
     /*Initialize the output file.*/
     int integrated = get_argument(parser, "-integrated", NULL) ? 1 : 0;
-    int user_level = get_argument(parser, "-flux-at-level", buffer) ? atoi(buffer) : -1;
+    int user_level = -1;
+    if (get_argument(parser, "-flux-at-level", buffer))
+    {
+        user_level = atoi(buffer);
+        if (user_level < 1 || user_level > atm.num_levels)
+        {
+            fprintf(stderr, "[%s, %d] Error:\n", __FILE__, __LINE__); \
+            fprintf(stderr, "-flux-at-level %d input must be in range 1 <= level <= %d\n.",
+                    user_level, atm.num_levels);
+            return EXIT_FAILURE;
+        }
+        user_level -= 1;
+    }
     if (!get_argument(parser, "-o", buffer))
     {
         snprintf(buffer, valuelen, "%s", "output.nc");

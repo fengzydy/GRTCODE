@@ -7,7 +7,8 @@
 
 typedef enum Variables
 {
-    TIME,
+    MISSING = -1,
+    TIME = 0,
     LATITUDE,
     LONGITUDE,
     COLUMN,
