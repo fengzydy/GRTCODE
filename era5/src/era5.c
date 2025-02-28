@@ -148,7 +148,8 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         int dimid;
         nc_catch(nc_inq_dimid(ncid, "time", &dimid));
         size_t num_times;
-        nc_catch(nc_inq_dimlen(ncid, dimid, &num_times));
+        char * name;
+        nc_catch(nc_inq_dim(ncid, dimid, name, &num_times));
         T = (int)num_times - 1;
     }
     atm.num_times = T - t + 1;
@@ -171,7 +172,8 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         int dimid;
         nc_catch(nc_inq_dimid(ncid, "lon", &dimid));
         size_t num_lon;
-        nc_catch(nc_inq_dimlen(ncid, dimid, &num_lon));
+        char * name;
+        nc_catch(nc_inq_dim(ncid, dimid, name, &num_lon));
         X = (int)num_lon - 1;
     }
     nlon = X - x + 1;
@@ -195,7 +197,8 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         int dimid;
         nc_catch(nc_inq_dimid(ncid, "lat", &dimid));
         size_t num_lat;
-        nc_catch(nc_inq_dimlen(ncid, dimid, &num_lat));
+        char * name;
+        nc_catch(nc_inq_dim(ncid, dimid, name, &num_lat));
         Y = (int)num_lat - 1;
     }
     nlat = Y - y + 1;
@@ -219,7 +222,8 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         int dimid;
         nc_catch(nc_inq_dimid(ncid, "sigma_level", &dimid));
         size_t num_levels;
-        nc_catch(nc_inq_dimlen(ncid, dimid, &num_levels));
+        char * name;
+        nc_catch(nc_inq_dim(ncid, dimid, name, &num_levels));
         Z = (int)num_levels - 1;
     }
     nlevel = Z - z + 1;
