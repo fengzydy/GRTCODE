@@ -403,7 +403,7 @@ build/era5.o: era5/src/era5.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ -c $<
 
 build/era5: framework/src/driver.c build/era5.o build/libclouds.a build/libgrtcode.a
-	$(CC) $(CPPFLAGS) -Icirc/src $(CFLAGS) -o $@ $^ -lm
+	$(CC) $(CPPFLAGS) -Icirc/src $(CFLAGS) -o $@ $^ $(LDFLAGS) -lnetcdf -lm
 
 # Applications.
 # RFMIP-IRF
