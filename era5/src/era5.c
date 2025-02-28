@@ -956,7 +956,22 @@ void close_flux_file(Output_t * const o)
 /*Write fluxes to the output file.*/
 void write_output(Output_t * output, Variables_t id, fp_t const * data, int time, int column)
 {
- 
+    (void)time;
+    if (id < 0)
+    {
+        /*This variable is not in the output file, so just silently return.*/
+        return;
+    }
+    if (id > 256)
+    {
+        fprintf(stderr, "[%s: %d] Error: bad id = %d.\n", __FILE__, __LINE__, id); \
+        exit(EXIT_FAILURE); \
+    }
+    if (output->varid[id] == -1)
+    {
+        return;
+    }
+
     int lat = column/nlon;
     int lon = column - nlon*lat;
     size_t start[4] = {time, lat, lon, 0};
