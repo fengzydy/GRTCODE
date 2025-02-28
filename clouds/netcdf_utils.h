@@ -1,15 +1,7 @@
 #ifndef NETCDF_UTILS_H
 #define NETCDF_UTILS_H
 
-#ifdef NETCDF_INSTALLED
 #include "netcdf.h"
-#else
-#define NC_INT 1
-#define NC_FLOAT 2
-#define NC_DOUBLE 3
-#define NC_CHAR 4
-#define nc_type int
-#endif
 
 
 /* @brief Crashes if any netCDF errors are detected.*/

@@ -2,35 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "netcdf_utils.h"
-
-#ifdef NETCDF_INSTALLED
 #include "netcdf.h"
-#else
-#define NC_NOERR 0
-#define nc_strerror(err) ""
-#define nc_open(path, mode, ncid) 0
-#define nc_close(ncid) 0
-#define nc_inq_varid(ncid, variable, varid) 0
-#define nc_get_att_int(ncid, varid, name, buffer) 0
-#define nc_get_att_float(ncid, varid, name, buffer) 0
-#define nc_get_att_double(ncid, varid, name, buffer) 0
-#define nc_get_att_text(ncid, varid, name, buffer) 0
-#define nc_get_vara_int(ncid, varid, corner, sizes, data) 0
-#define nc_get_vara_float(ncid, varid, corner, sizes, data) 0
-#define nc_get_vara_double(ncid, varid, corner, sizes, data) 0
-#define nc_inq_dimid(ncid, name, dimid) 0
-#define nc_inq_vardimid(ncid, varid, dimids) 0
-int nc_inq_dimlen(int ncid, int dimid, int * size)
-{
-    *size = 1;
-    return 0;
-}
-int nc_inq_varndims(int ncid, int varid, int * ndims)
-{
-    *ndims = 5;
-    return 0;
-}
-#endif
 
 
 /* @brief Crashes if any netCDF errors are detected.*/
