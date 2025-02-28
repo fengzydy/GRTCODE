@@ -148,7 +148,7 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         int dimid;
         nc_catch(nc_inq_dimid(ncid, "time", &dimid));
         size_t num_times;
-        char * name;
+        char name[256];
         nc_catch(nc_inq_dim(ncid, dimid, name, &num_times));
         T = (int)num_times - 1;
     }
@@ -172,7 +172,7 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         int dimid;
         nc_catch(nc_inq_dimid(ncid, "lon", &dimid));
         size_t num_lon;
-        char * name;
+        char name[256];
         nc_catch(nc_inq_dim(ncid, dimid, name, &num_lon));
         X = (int)num_lon - 1;
     }
@@ -197,7 +197,7 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         int dimid;
         nc_catch(nc_inq_dimid(ncid, "lat", &dimid));
         size_t num_lat;
-        char * name;
+        char name[256];
         nc_catch(nc_inq_dim(ncid, dimid, name, &num_lat));
         Y = (int)num_lat - 1;
     }
@@ -222,7 +222,7 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
         int dimid;
         nc_catch(nc_inq_dimid(ncid, "sigma_level", &dimid));
         size_t num_levels;
-        char * name;
+        char name[256];
         nc_catch(nc_inq_dim(ncid, dimid, name, &num_levels));
         Z = (int)num_levels - 1;
     }
@@ -997,6 +997,9 @@ void write_output(Output_t * output, Variables_t id, fp_t const * data, int time
             count[0] = 1; count[1] = output->num_layers; count[2] = 1; count[3] = 1;
             break;
         case SURFACE_TEMPERATURE:
+            start[0] = time; start[1] = lat; start[2] = lon; start[3] = 0;
+            count[0] = 1; count[1] = 1; count[2] = 1; count[3] = 1;
+            break;
         case RLDSAF:
         case RLUSAF:
         case RLUTAF:
