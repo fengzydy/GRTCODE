@@ -522,8 +522,20 @@ static int column_calculation(int label,
                 {
                     optics_liquid_cloud.tau[k*grid.n + m] *= atm_column.thickness[k];
                     optics_ice_cloud.tau[k*grid.n + m] *= atm_column.thickness[k];
-                }
+		    if (m == 100) {
+		    	fprintf(stdout, "atm_column.liquid_content = %f\n", atm_column.liquid_content[k]);  
+		    	fprintf(stdout, "atm_column.ice_content = %f\n", atm_column.ice_content[k]);  
+
+		    	fprintf(stdout, "optics_liquid_cloud.tau[%d][%llu] = %f\n",
+    	            	k, (unsigned long long)m, optics_liquid_cloud.tau[k * grid.n + m]);
+
+		    	fprintf(stdout, "optics_ice_cloud.tau[%d][%llu] = %f\n",
+	            	k, (unsigned long long)m, optics_ice_cloud.tau[k * grid.n + m]);
+		     }
+
+		}
             }
+
 
             /*Add to gas optics.*/
             optics_array[2] = &optics_liquid_cloud;
