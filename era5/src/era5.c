@@ -125,6 +125,7 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     add_argument(parser, "-Y", "--lat-upper-bound", "Ending latitude index.", &one);
     add_argument(parser, "-z", "--level-lower-bound", "Starting level index.", &one);
     add_argument(parser, "-Z", "--level-upper-bound", "Ending level index.", &one);
+    add_argument(parser, "-ghg_start_year", NULL, "Start year of GHG input file.",&one);
     parse_args(*parser);
 
     /*Open the input file.*/
@@ -541,10 +542,9 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
                     int m;
                     for (m=0; m<atm.num_layers; ++m)
                     {
-                        atm.layer_thickness[offset+m] =(fabs(log(plev[m]) -
-                                                              log(plev[m+1]))*
+                        atm.layer_thickness[offset+m] = (fabs(log(plev[m]) - log(plev[m+1]))*
                                                         tlay[m]*gas_constant)/
-                                                        (molar_mass*kg_per_g*gravity); /*[m].*/
+                                                        (molar_mass*kg_per_g*gravity);
                     }
                 }
             }
@@ -563,6 +563,16 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     for (i=0; i<atm.num_times*atm.num_columns*atm.emissivity_grid_size; ++i)
     {
         atm.surface_emissivity[i] = 1.;
+    }
+
+    int ghg_start_year;
+    if (get_argument(*parser, "-ghg_start_year", buffer))
+    {
+        ghg_start_year = atoi(buffer);
+    }
+    else
+    {
+        ghg_start_year = 1;
     }
 
     /*Open the greenhouse gas file.*/
@@ -584,7 +594,7 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
             alloc(atm.ppmv[atm.num_molecules], atm.num_times*atm.num_columns*atm.num_levels, fp_t *);
             fp_t *ppmv = atm.ppmv[atm.num_molecules];
             nc_catch(nc_inq_varid(ncid, ghg_molecules[i].name, &varid));
-            start[0] = year - 1; start[1] = 0; start[2] = 0; start[3] = 0;
+            start[0] = year - ghg_start_year; start[1] = 0; start[2] = 0; start[3] = 0;
             count[0] = 1; count[1] = 1; count[2] = 1; count[3] = 1;
             fp_t ab_in;
             get_var(ncid, varid, start, count, &ab_in);
@@ -602,8 +612,8 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
     /*CFC abundances.*/
     atm.num_cfcs = 0;
     int const num_cfcs = 2;
-    struct MoleculeMeta cfcs[num_cfcs] = {{HFC134, "-HFC-134a-eq", "hfc134aeq", 0.},
-                                          {CFC12, "-CFC-12-eq", "cfc12eq", 0.},
+    struct MoleculeMeta cfcs[num_cfcs] = {{HFC134a, "-HFC-134a-eq", "hfc134aeq", 0.},
+                                          {CFC12, "-CFC-12-eq", "cfc12eq", 0.}};
     alloc(abundance, atm.num_times*atm.num_levels*nlat*nlon, fp_t *);
     alloc(atm.cfc, num_cfcs, Cfc_t *);
     alloc(atm.cfc_ppmv, num_cfcs, fp_t **);
@@ -614,7 +624,7 @@ Atmosphere_t create_atmosphere(Parser_t *parser)
             atm.cfc[atm.num_cfcs].id = cfcs[i].id;
             alloc(atm.cfc_ppmv[atm.num_cfcs], atm.num_times*atm.num_levels*atm.num_columns, fp_t *);
             nc_catch(nc_inq_varid(ncid, cfcs[i].name, &varid));
-            start[0] = year - 1; start[1] = 0; start[2] = 0; start[3] = 0;
+            start[0] = year - ghg_start_year; start[1] = 0; start[2] = 0; start[3] = 0;
             count[0] = 1; count[1] = 1; count[2] = 1; count[3] = 1;
             fp_t ab_in;
             get_var(ncid, varid, start, count, &ab_in);
@@ -864,6 +874,8 @@ void create_flux_file(Output_t **output, char const * const filepath,
     add_variable(file, "ch4_vmr", 4, dimensions, "methane_vmr", "ppmv", CH4_VMR);
     add_variable(file, "co2_vmr", 4, dimensions, "carbon_dioxide_vmr", "ppmv", CO2_VMR);
     add_variable(file, "n2o_vmr", 4, dimensions, "nitrous_oxide_vmr", "ppmv", N2O_VMR);
+    int dims_ts[3] = {dimensions[0], dimensions[1], dimensions[2]};
+    add_variable(file, "ts", 3, dims_ts, "surface_temperature", "K", SURFACE_TEMPERATURE);
     dimensions[1] = LAYER; dimensions[2] = LATITUDE; dimensions[3] = LONGITUDE;
     add_variable(file, "t_layer", 4, dimensions, "air_layer_temperature", "mb", LAYER_TEMPERATURE);
     int num_dimensions = 4;
