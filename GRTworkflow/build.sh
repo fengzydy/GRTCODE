@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Get the directory where the environment script lives.
-workflow_home="/ncrc/home1/Jing.Feng/scripts/GRTworkflow" #"$( dirname -- "$( readlink -f -- "$0"; )"; )"
+workflow_home="/ncrc/home1/Jing.Feng/scripts/grtcode/GRTworkflow" #"$( dirname -- "$( readlink -f -- "$0"; )"; )"
 
 # Parse the command line arguments to see if the user wants to use a custom version of grtcode.
 argument_list="$0 [-h|--help] [-p path to grtcode repository]"
@@ -47,7 +47,7 @@ fi
 
 # If you are not using the basic installation, then build your custom version.
   # Source the environment script.
-  source /ncrc/home1/Jing.Feng/scripts/GRTworkflow/environment.sh
+  source /ncrc/home1/Jing.Feng/scripts/grtcode/GRTworkflow/environment.sh
 
   # Prepare to build the libraries and executables.
   current_location="$PWD"
