@@ -93,7 +93,7 @@ log="$work_directory/run-era5-logfile-$year-$name_tag"
 
 # Create the runscript.
 runscript="era5-runscript.$year.$name_tag"
-rm "$runscript"
+[ -f "$runscript" ] && rm "$runscript"
 cat <<EOF >> $runscript
 #!/bin/bash -ex
 
