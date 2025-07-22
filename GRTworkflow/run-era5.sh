@@ -33,7 +33,7 @@ threads="128"
 nlat="48"
 
 # Handle command line arguments.
-argument_list="$0 [-h|--help] [-p <path to grtcode repository>] year ghg_path name_tag"
+argument_list="$0 [-h|--help] [-p <path to grtcode repository>] year era5_data ghg_path name_tag"
 counter=0
 while [[ $# -gt 0 ]]; do
   argument="$1"
@@ -43,6 +43,7 @@ while [[ $# -gt 0 ]]; do
       echo "\nPositional arguments:"
       echo "exp"
       echo "year:          ERA5 year to run."
+      echo "era5_data":   ERA5 input directory
       echo "ghg_path:   Path to Greenhouse gas input file"
       echo "name_tag:   Name tag of outputfile"
       echo "\nOptional arguments:"
@@ -63,11 +64,13 @@ while [[ $# -gt 0 ]]; do
     ;;
     *)
       counter=$((counter+1))
-       if [ $counter -eq 1 ]; then
+      if [ $counter -eq 1 ]; then
         year="$argument"
       elif [ $counter -eq 2 ]; then
-        ghg_path="$argument"
+        era5_data="$argument"
       elif [ $counter -eq 3 ]; then
+        ghg_path="$argument"
+      elif [ $counter -eq 4 ]; then
         name_tag="$argument"
       else
         echo "Error: too many arguments."
@@ -78,7 +81,7 @@ while [[ $# -gt 0 ]]; do
     ;;
   esac
 done
-if [ $counter -ne 3 ]; then
+if [ $counter -ne 4 ]; then
   echo "${counter}"
   echo "Error: missing required argument."
   echo "Usage: $argument_list"
