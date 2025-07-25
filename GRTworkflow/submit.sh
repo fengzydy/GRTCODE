@@ -3,11 +3,6 @@
 # ============================================================
 # Script to run ERA5 radiative transfer experiments for GHGs
 # ============================================================
-
-# Get the absolute path to this script and the run script
-script_dir="$(dirname "$(readlink -f "$0")")"
-runscript="${script_dir}/run-era5.sh"
-
 # Set working directory (where your Github repository resides)
 workdir="/ncrc/home1/Jing.Feng/scripts/grtcode"
 
@@ -23,7 +18,6 @@ era5_data="/gpfs/f5/gfdl_m/scratch/Jing.Feng/line-by-line/run/era5_coarse"
 
 # List of experiments to run (see below for available options)
 exps=(PI control co2_PI ch4_PI n2o_PI cfc12eq_PI hfc134aeq_PI)
-
 # ------------------------------------------------------------
 # Available experiment options for exps:
 # ------------------------------------------------------------
@@ -39,7 +33,12 @@ exps=(PI control co2_PI ch4_PI n2o_PI cfc12eq_PI hfc134aeq_PI)
 # • Multi-gas/control experiments:
 #   control   → time-varying WMGHGs (CMIP7)
 #   PI        → fixed 1850 WMGHGs (pre-industrial baseline)
+# ------------------------------------------------------------
 
+
+# Get the absolute path to this script and the run script
+script_dir="$(dirname "$(readlink -f "$0")")"
+runscript="${script_dir}/run-era5.sh"
 # ------------------------------------------------------------
 # Loop over years and experiments
 # ------------------------------------------------------------
