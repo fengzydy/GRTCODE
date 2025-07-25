@@ -29,6 +29,14 @@ def combine_netcdf_files(input_files, output_file):
     ).sortby('lon')
 
     # Save to NetCDF
+    combined_ds['lon'].attrs['long_name'] = 'longitude'
+    combined_ds['lon'].attrs['units'] = 'degrees_E'
+    combined_ds['lon'].attrs['axis'] = 'X'
+
+    # Reorder dimensions to time, wavelength, lat, lon
+    desired_order = ('time', 'wavelength', 'lat', 'lon')
+    combined_ds = combined_ds.transpose(*[dim for dim in desired_order if dim in combined_ds.dims])
+
     combined_ds.to_netcdf(output_file)
     print("Final longitude ordering:", combined_ds['lon'].values)
     print(f"Combined NetCDF file saved to {output_file}")
