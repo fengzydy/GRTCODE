@@ -6,11 +6,11 @@ current_time="$( date +%Y-%m-%d-%H:%M:%S )"
 grtcode_repository="$workflow_home/../grtcode"
 
 # Variables needed to set reasonable defaults.
-grtcode_input_data="/ncrc/home1/Jing.Feng/scripts/grtcode/grtcode-data"
+grtcode_input_data="$workflow_home/../grtcode/grtcode-data"
 
 # Default arguments.
 account="$( sacctmgr --noheader list user $USER format=DefaultAccount%6 )"
-beta_distribution_data="/gpfs/f5/gfdl_m/scratch/Jing.Feng/line-by-line/run/input/clouds/beta_distribution.nc"
+beta_distribution_data="$grtcode_input_data/clouds/beta_distribution.nc"
 hfc134="$grtcode_input_data/cfc_cross_sections/HFC-134a_absorption_cross_sections.csv"
 cfc12="$grtcode_input_data/cfc_cross_sections/CFC-12_absorption_cross_sections.csv"
 cluster="c5"
@@ -18,8 +18,8 @@ era5_data="/gpfs/f5/gfdl_m/scratch/Jing.Feng/line-by-line/run/era5_coarse"
 greenhouse_gas_data="/gpfs/f5/gfdl_m/world-shared/Jing.Feng/GHG/annual_mean_gas_data.nc"
 hitran_par_data="$grtcode_input_data/HITRAN_files/hitran2016.par"
 h2o_continuum="$grtcode_input_data/water_vapor_continuum"
-ice_cloud_parameterization_data="/gpfs/f5/gfdl_m/world-shared/Jing.Feng/cloud_optics/lbl_pade_ice_lw_solid_column_severlyroughen_gamma_aeq1_thick.nc"
-liquid_cloud_parameterization_data="/gpfs/f5/gfdl_m/world-shared/Jing.Feng/cloud_optics/lbl_pade_liq_lw_mie_gamma_aeq12_thick.nc"
+ice_cloud_parameterization_data="$grtcode_input_data/cloud_optics/lbl_pade_ice_lw_solid_column_severlyroughen_gamma_aeq1_thick.nc"
+liquid_cloud_parameterization_data="$grtcode_input_data/cloud_optics/lbl_pade_liq_lw_mie_gamma_aeq12_thick.nc"
 nodes="24"
 n2_n2="$grtcode_input_data/collision_induced_absorption/N2-N2.csv"
 o2_n2="$grtcode_input_data/collision_induced_absorption/O2-N2.csv"
@@ -157,7 +157,7 @@ echo "Combining output files $work_directory/xxxx.${year}.${name_tag}-cleansky-s
 # Run the Python script
 module load cray-python/3.11.5
 srun -v --nodes=1 --ntasks-per-node=1 --cpus-per-task=1 \
-  python3 /ncrc/home1/Jing.Feng/scripts/GRTworkflow/combiner.py --workdir "$work_directory" --year "$year" --nametag "${name_tag}"\
+  python3 $workflow_home/combiner.py --workdir "$work_directory" --year "$year" --nametag "${name_tag}"\
   |& tee "$log"
 
 if [ "\$?" -ne "0" ]; then
